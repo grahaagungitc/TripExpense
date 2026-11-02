@@ -14,7 +14,6 @@
   <!-- SCREEN 1: SIGN IN (GOOGLE OAUTH NATIVE) -->
   <div id="loginScreen" class="min-h-screen flex flex-col justify-between items-center p-4">
     <div class="w-full max-w-md my-auto space-y-6">
-      
       <div class="flex items-center justify-center space-x-3 mb-6">
         <div class="w-12 h-12 bg-indigo-600 rounded-2xl flex items-center justify-center text-white text-2xl shadow-lg shadow-indigo-200">
           <i class="ri-wallet-3-line"></i>
@@ -41,8 +40,6 @@
           </svg>
           <span>Sign in with Google</span>
         </button>
-
-        <div id="loginError" class="hidden text-xs text-red-600 font-medium bg-red-50 p-3 rounded-xl border border-red-200 text-center"></div>
       </div>
 
       <div class="text-center text-xs text-slate-400">
@@ -54,7 +51,6 @@
   <!-- SCREEN 2: MAIN DASHBOARD -->
   <div id="mainDashboard" class="hidden pb-12">
     
-    <!-- TOP BAR HEADER -->
     <header class="bg-indigo-600 text-white shadow-md sticky top-0 z-50">
       <div class="max-w-4xl mx-auto px-4 py-3 flex items-center justify-between">
         <div class="flex items-center space-x-3">
@@ -77,10 +73,9 @@
       </div>
     </header>
 
-    <!-- DASHBOARD CONTAINER -->
     <main class="max-w-4xl mx-auto px-4 mt-4 space-y-6">
 
-      <!-- EVENT BANNER WITH TOTAL EXPENSE CARD -->
+      <!-- EVENT BANNER -->
       <div class="bg-white p-5 rounded-2xl shadow-sm border border-slate-200 flex flex-col md:flex-row md:items-center justify-between gap-4">
         <div class="space-y-1">
           <span class="text-[10px] font-bold text-indigo-600 uppercase tracking-wider">EVENT AKTIF</span>
@@ -88,7 +83,6 @@
           <p class="text-xs text-slate-500">Terhubung dengan Supabase Realtime Engine</p>
         </div>
         
-        <!-- CARD TOTAL PENGELUARAN EVENT -->
         <div class="flex items-center justify-between md:justify-end gap-4 bg-indigo-50 border border-indigo-100 p-3.5 rounded-2xl">
           <div>
             <p class="text-[11px] font-bold text-indigo-500 uppercase tracking-wide">Total Pengeluaran Event</p>
@@ -125,14 +119,9 @@
             </h3>
             <p class="text-xs text-slate-500">Pilih trip, kategori, dan peserta yang berpartisipasi</p>
           </div>
-          <button onclick="toggleQuickAddUserModal()" class="px-3 py-1.5 bg-indigo-50 hover:bg-indigo-100 text-indigo-700 text-xs font-bold rounded-xl border border-indigo-200 flex items-center gap-1">
-            <i class="ri-user-add-line"></i> + Buat User Baru
-          </button>
         </div>
 
         <form id="expenseForm" onsubmit="handleExpenseSubmit(event)" class="space-y-4">
-          
-          <!-- PILIH TRIP & KATEGORI -->
           <div class="grid grid-cols-1 md:grid-cols-2 gap-4">
             <div class="space-y-1">
               <label class="text-xs font-semibold text-slate-700">Pilih Judul Trip / Event</label>
@@ -170,7 +159,7 @@
           </div>
 
           <div class="space-y-2 pt-2 border-t border-slate-100">
-            <label class="text-xs font-semibold text-slate-700">Anggota Yang Ikut Dalam Sub-Expense Ini (Centang yang ikut):</label>
+            <label class="text-xs font-semibold text-slate-700">Anggota Yang Ikut Dalam Sub-Expense Ini:</label>
             <div id="expPesertaChecklist" class="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 gap-2"></div>
           </div>
 
@@ -208,29 +197,59 @@
         <div id="riwayatListContainer" class="divide-y divide-slate-100"></div>
       </section>
 
-      <!-- PAGE 4: ADMIN SETUP (KHUSUS ADMIN) -->
+      <!-- PAGE 4: ADMIN SETUP (DENGAN LIST DATA SETUP) -->
       <section id="page-admin" class="page-content hidden bg-white p-5 rounded-2xl shadow-sm border border-slate-200 space-y-6">
         <div class="border-b pb-3 border-slate-100">
           <h3 class="font-bold text-slate-800 flex items-center gap-2 text-amber-700">
             <i class="ri-settings-4-line"></i> Master Setup (Khusus Admin)
           </h3>
-          <p class="text-xs text-slate-500">Kelola Trip baru, kategori expense, dan assign user per trip</p>
+          <p class="text-xs text-slate-500">Kelola Trip baru, Tambah User, Kategori, dan Assign User per trip</p>
         </div>
 
-        <!-- 1. BUAT TRIP BARU -->
+        <!-- 1. BUAT JUDUL TRIP BARU & LIST DATA TRIP -->
         <div class="p-4 bg-amber-50/60 border border-amber-200 rounded-2xl space-y-3">
-          <h4 class="text-xs font-bold text-slate-800 uppercase tracking-wider">1. Buat Judul Trip Utama Baru</h4>
+          <h4 class="text-xs font-bold text-slate-800 uppercase tracking-wider">1. Buat & Kelola Judul Trip</h4>
           <div class="flex gap-2">
             <input type="text" id="newTripTitle" placeholder="Misal: Trip Outing Bali 2026" class="flex-1 px-3 py-2 text-xs border border-slate-300 rounded-xl focus:outline-none">
             <button onclick="handleCreateNewTrip()" class="px-4 py-2 bg-amber-600 hover:bg-amber-700 text-white font-bold text-xs rounded-xl shadow-sm shrink-0">
               Buat Trip Baru
             </button>
           </div>
+          
+          <!-- LIST DATA TRIP YANG SUDAH DIBUAT -->
+          <div class="pt-2">
+            <p class="text-[11px] font-semibold text-slate-600 mb-1">Daftar Trip Terdaftar:</p>
+            <div id="adminTripList" class="space-y-1.5 max-h-40 overflow-y-auto"></div>
+          </div>
         </div>
 
-        <!-- 2. TAMBAH KATEGORI EXPENSE -->
+        <!-- 2. TAMBAH USER BARU & LIST USER TERDAFTAR -->
+        <div class="p-4 bg-blue-50/60 border border-blue-200 rounded-2xl space-y-3">
+          <h4 class="text-xs font-bold text-slate-800 uppercase tracking-wider">2. Tambah & Kelola Data User</h4>
+          <div class="grid grid-cols-1 sm:grid-cols-3 gap-2">
+            <input type="text" id="adminNewUserName" placeholder="Nama Lengkap" class="px-3 py-2 text-xs border border-slate-300 rounded-xl focus:outline-none">
+            <input type="email" id="adminNewUserEmail" placeholder="email@favehotels.com" class="px-3 py-2 text-xs border border-slate-300 rounded-xl focus:outline-none">
+            <div class="flex gap-2">
+              <select id="adminNewUserRole" class="px-2 py-2 text-xs border border-slate-300 rounded-xl focus:outline-none bg-white">
+                <option value="USER">USER</option>
+                <option value="ADMIN">ADMIN</option>
+              </select>
+              <button onclick="handleAdminAddUser()" class="flex-1 px-3 py-2 bg-blue-600 hover:bg-blue-700 text-white font-bold text-xs rounded-xl shadow-sm shrink-0">
+                + Tambah
+              </button>
+            </div>
+          </div>
+
+          <!-- LIST DATA USER TERDAFTAR -->
+          <div class="pt-2">
+            <p class="text-[11px] font-semibold text-slate-600 mb-1">Daftar User Terdaftar Sistem:</p>
+            <div id="adminUserList" class="grid grid-cols-1 sm:grid-cols-2 gap-2 max-h-48 overflow-y-auto"></div>
+          </div>
+        </div>
+
+        <!-- 3. KATEGORI EXPENSE -->
         <div class="p-4 bg-emerald-50/60 border border-emerald-200 rounded-2xl space-y-3">
-          <h4 class="text-xs font-bold text-slate-800 uppercase tracking-wider">2. Buat Kategori Expense Baru</h4>
+          <h4 class="text-xs font-bold text-slate-800 uppercase tracking-wider">3. Buat Kategori Expense</h4>
           <div class="flex gap-2">
             <input type="text" id="newCategoryName" placeholder="Misal: Bensin, Tiket, Penginapan" class="flex-1 px-3 py-2 text-xs border border-slate-300 rounded-xl focus:outline-none">
             <button onclick="handleCreateNewCategory()" class="px-4 py-2 bg-emerald-600 hover:bg-emerald-700 text-white font-bold text-xs rounded-xl shadow-sm shrink-0">
@@ -240,9 +259,9 @@
           <div id="adminCategoryList" class="flex flex-wrap gap-1.5 pt-1"></div>
         </div>
 
-        <!-- 3. ASSIGN USER KE LIST TRIP TERTEKATU -->
+        <!-- 4. ASSIGN USER KE TRIP TERKINI -->
         <div class="p-4 bg-indigo-50/60 border border-indigo-200 rounded-2xl space-y-3">
-          <h4 class="text-xs font-bold text-slate-800 uppercase tracking-wider">3. Assign User Ke Trip Tertentu</h4>
+          <h4 class="text-xs font-bold text-slate-800 uppercase tracking-wider">4. Assign User Ke Trip Tertentu</h4>
           <p class="text-xs text-slate-500">Pilih trip lalu centang user mana saja yang berpartisipasi dalam trip tersebut.</p>
           
           <div class="space-y-2">
@@ -262,40 +281,9 @@
     </main>
   </div>
 
-  <!-- MODAL QUICK ADD USER BARU -->
-  <div id="quickAddUserModal" class="hidden fixed inset-0 bg-slate-900/50 backdrop-blur-sm z-50 flex items-center justify-center p-4">
-    <div class="bg-white rounded-3xl p-6 max-w-sm w-full space-y-4 shadow-xl">
-      <div class="flex items-center justify-between border-b pb-2">
-        <h4 class="font-bold text-slate-900 text-sm">Tambah User / Anggota Baru</h4>
-        <button onclick="toggleQuickAddUserModal()" class="text-slate-400 hover:text-slate-600"><i class="ri-close-line text-xl"></i></button>
-      </div>
-      <div class="space-y-3 text-xs">
-        <div>
-          <label class="font-semibold text-slate-700">Nama Lengkap</label>
-          <input type="text" id="newUserName" placeholder="Misal: Budi Santoso" class="w-full px-3 py-2 border rounded-xl mt-1">
-        </div>
-        <div>
-          <label class="font-semibold text-slate-700">Email User</label>
-          <input type="email" id="newUserEmail" placeholder="budi@favehotels.com" class="w-full px-3 py-2 border rounded-xl mt-1">
-        </div>
-        <div>
-          <label class="font-semibold text-slate-700">Role</label>
-          <select id="newUserRole" class="w-full px-3 py-2 border rounded-xl mt-1">
-            <option value="USER">USER</option>
-            <option value="ADMIN">ADMIN</option>
-          </select>
-        </div>
-      </div>
-      <button onclick="saveNewUserFromModal()" class="w-full py-2.5 bg-indigo-600 hover:bg-indigo-700 text-white font-bold text-xs rounded-xl shadow-md">
-        Simpan User Baru
-      </button>
-    </div>
-  </div>
-
-  <!-- SCRIPT ENGINE (SUPABASE CLIENT) -->
   <script>
     const SUPABASE_URL = 'https://htmmlzaxnbedweezhlyb.supabase.co';
-    const SUPABASE_KEY = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6Imh0bW1semF4bmJlZHdlZXpobHliIiwicm9sZSI6ImFub24iLCJpYXQiOjE3OTM1OTYwNjQsImV4cCI6MjEwOTE3MjA2NH0.HduOFDBtcTx4HbJ3IpLSeBQjZaxzZ2qj-v1DvbRU9Y4'; // Ganti dengan Full Anon Key Anda
+    const SUPABASE_KEY = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6Imh0bW1semF4bmJlZHdlZXpobHliIiwicm9sZSI6ImFub24iLCJpYXQiOjE3OTM1OTYwNjQsImV4cCI6MjEwOTE3MjA2NH0.HduOFDBtcTx4HbJ3IpLSeBQjZaxzZ2qj-v1DvbRU9Y4'; // Gunakan Full Anon Key Anda
     const db = supabase.createClient(SUPABASE_URL, SUPABASE_KEY, {
       auth: {
         flowType: 'pkce',
@@ -416,37 +404,63 @@
     }
 
     function renderUI() {
-      // Hitung Total Pengeluaran Event
       const totalNominal = appData.expenses.reduce((sum, item) => sum + (parseFloat(item.nominal) || 0), 0);
       const formattedTotal = 'Rp ' + totalNominal.toLocaleString('id-ID');
       
       document.getElementById('displayTotalEventNominal').innerText = formattedTotal;
       document.getElementById('riwayatTotalNominal').innerText = formattedTotal;
 
-      // 1. Render Dropdown Trip pada Form Expense
+      // 1. Dropdown Trip pada Form Expense
       const expTripSelect = document.getElementById('expTripSelect');
-      expTripSelect.innerHTML = appData.trips.map(t => `
-        <option value="${t.id}" ${appData.activeTrip && appData.activeTrip.id === t.id ? 'selected' : ''}>${t.judul}</option>
-      `).join('');
+      if (appData.trips.length > 0) {
+        expTripSelect.innerHTML = appData.trips.map(t => `
+          <option value="${t.id}" ${appData.activeTrip && appData.activeTrip.id === t.id ? 'selected' : ''}>${t.judul}</option>
+        `).join('');
+      } else {
+        expTripSelect.innerHTML = `<option value="">-- Belum Ada Trip (Buat di Admin Setup) --</option>`;
+      }
 
-      // 2. Render Dropdown Kategori pada Form Expense
+      // 2. Dropdown Kategori
       const expKategoriSelect = document.getElementById('expKategoriSelect');
       expKategoriSelect.innerHTML = appData.categories.map(c => `
         <option value="${c.nama}">${c.nama}</option>
       `).join('');
 
-      // 3. Render Dropdown Pembayar di Awal
+      // 3. Dropdown Pembayar di Awal
       const pembayarSelect = document.getElementById('expPembayarSelect');
       pembayarSelect.innerHTML = appData.users.map(u => `
         <option value="${u.email}" ${u.email === currentUser.email ? 'selected' : ''}>${u.nama} (${u.email})</option>
       `).join('');
 
-      // 4. Render Checklist Peserta untuk Trip Yang Dipilih
+      // 4. Checklist Peserta
       onSelectTripForExpenseChange();
 
-      // 5. Render Fitur Admin Setup jika role ADMIN
+      // 5. Fitur khusus Admin Setup (Tampilkan List Data)
       if (currentUser.role === 'ADMIN') {
-        // Render List Kategori
+        // List Data Trip
+        document.getElementById('adminTripList').innerHTML = appData.trips.length > 0 
+          ? appData.trips.map(t => `
+              <div class="flex items-center justify-between p-2 bg-white rounded-xl border border-amber-200 text-xs">
+                <span class="font-bold text-slate-800">${t.judul}</span>
+                <button onclick="handleDeleteTrip('${t.id}')" class="text-red-500 hover:text-red-700 font-semibold text-[10px]"><i class="ri-delete-bin-line"></i> Hapus</button>
+              </div>
+            `).join('')
+          : `<p class="text-xs text-slate-400 italic">Belum ada trip yang dibuat.</p>`;
+
+        // List Data User
+        document.getElementById('adminUserList').innerHTML = appData.users.length > 0
+          ? appData.users.map(u => `
+              <div class="flex items-center justify-between p-2 bg-white rounded-xl border border-blue-200 text-xs">
+                <div class="truncate">
+                  <p class="font-bold text-slate-800">${u.nama} <span class="text-[9px] px-1.5 py-0.2 bg-indigo-100 text-indigo-700 rounded">${u.role}</span></p>
+                  <p class="text-[10px] text-slate-400 truncate">${u.email}</p>
+                </div>
+                <button onclick="handleDeleteUser('${u.id}')" class="text-red-500 hover:text-red-700 text-[10px] ml-1"><i class="ri-delete-bin-line"></i></button>
+              </div>
+            `).join('')
+          : `<p class="text-xs text-slate-400 italic">Belum ada user.</p>`;
+
+        // List Kategori
         document.getElementById('adminCategoryList').innerHTML = appData.categories.map(c => `
           <span class="px-2.5 py-1 bg-white border border-emerald-300 rounded-lg text-xs font-semibold text-emerald-800 flex items-center gap-1">
             ${c.nama}
@@ -454,7 +468,7 @@
           </span>
         `).join('');
 
-        // Render Select Trip For Assign
+        // Dropdown Trip Assign
         const adminTripSelect = document.getElementById('adminTripSelectForAssign');
         adminTripSelect.innerHTML = appData.trips.map(t => `
           <option value="${t.id}" ${appData.activeTrip && appData.activeTrip.id === t.id ? 'selected' : ''}>${t.judul}</option>
@@ -467,7 +481,6 @@
       renderRiwayat();
     }
 
-    // Mengubah checklist peserta saat dropdown Trip di Form Catat Expense diganti
     function onSelectTripForExpenseChange() {
       const selectedTripId = document.getElementById('expTripSelect').value;
       const targetTrip = appData.trips.find(t => t.id === selectedTripId) || appData.activeTrip;
@@ -485,7 +498,6 @@
       `).join('');
     }
 
-    // Render Checklist User yang Di-assign pada Menu Admin
     function renderAdminUserAssignChecklist() {
       const selectedTripId = document.getElementById('adminTripSelectForAssign').value;
       const targetTrip = appData.trips.find(t => t.id === selectedTripId);
@@ -499,12 +511,97 @@
       `).join('');
     }
 
+    // 1. BUAT TRIP BARU & HAPUS TRIP
+    async function handleCreateNewTrip() {
+      const judul = document.getElementById('newTripTitle').value.trim();
+      if (!judul) return alert('Masukkan judul trip!');
+
+      const { data, error } = await db.from('trips').insert([{ judul: judul, created_by: currentUser.email }]).select();
+      
+      if (error) {
+        return alert('Gagal membuat Trip: ' + error.message);
+      }
+
+      alert('Trip baru berhasil dibuat dan disimpan!');
+      document.getElementById('newTripTitle').value = '';
+      fetchAppData();
+    }
+
+    async function handleDeleteTrip(tripId) {
+      if (confirm('Hapus trip ini beserta catatannya?')) {
+        const { error } = await db.from('trips').delete().eq('id', tripId);
+        if (error) alert('Gagal menghapus trip: ' + error.message);
+        else fetchAppData();
+      }
+    }
+
+    // 2. TAMBAH USER MANUAL & HAPUS USER
+    async function handleAdminAddUser() {
+      const nama = document.getElementById('adminNewUserName').value.trim();
+      const email = document.getElementById('adminNewUserEmail').value.trim();
+      const role = document.getElementById('adminNewUserRole').value;
+
+      if (!nama || !email) return alert('Lengkapi nama dan email user!');
+
+      const { error } = await db.from('users').insert([{ nama: nama, email: email, role: role }]);
+      if (error) return alert('Gagal menambah user: ' + error.message);
+
+      alert('User baru berhasil ditambahkan!');
+      document.getElementById('adminNewUserName').value = '';
+      document.getElementById('adminNewUserEmail').value = '';
+      fetchAppData();
+    }
+
+    async function handleDeleteUser(userId) {
+      if (confirm('Hapus user ini dari sistem?')) {
+        const { error } = await db.from('users').delete().eq('id', userId);
+        if (error) alert('Gagal menghapus user: ' + error.message);
+        else fetchAppData();
+      }
+    }
+
+    // 3. KATEGORI EXPENSE
+    async function handleCreateNewCategory() {
+      const nama = document.getElementById('newCategoryName').value.trim();
+      if (!nama) return alert('Masukkan nama kategori!');
+
+      const { error } = await db.from('categories').insert([{ nama: nama }]);
+      if (error) return alert('Gagal menambah kategori: ' + error.message);
+
+      alert('Kategori baru berhasil ditambahkan!');
+      document.getElementById('newCategoryName').value = '';
+      fetchAppData();
+    }
+
+    async function handleDeleteCategory(catId) {
+      if (confirm('Hapus kategori ini?')) {
+        await db.from('categories').delete().eq('id', catId);
+        fetchAppData();
+      }
+    }
+
+    // 4. SAVE ASSIGN USER
+    async function saveTripParticipants() {
+      const selectedTripId = document.getElementById('adminTripSelectForAssign').value;
+      if (!selectedTripId) return alert('Pilih trip terlebih dahulu!');
+      
+      const selectedEmails = Array.from(document.querySelectorAll('.admin-trip-user-chk:checked')).map(c => c.value);
+      
+      const { error } = await db.from('trips').update({ active_participant_emails: selectedEmails }).eq('id', selectedTripId);
+      if (error) return alert('Gagal menyimpan peserta trip: ' + error.message);
+
+      alert('Daftar peserta yang di-assign ke trip berhasil disimpan!');
+      fetchAppData();
+    }
+
     async function handleExpenseSubmit(e) {
       e.preventDefault();
       const selectedPeserta = Array.from(document.querySelectorAll('.exp-chk-peserta:checked')).map(c => c.value);
       if (!selectedPeserta.length) return alert('Pilih minimal 1 peserta!');
 
       const tripId = document.getElementById('expTripSelect').value;
+      if (!tripId) return alert('Pilih trip terlebih dahulu!');
+
       const kategori = document.getElementById('expKategoriSelect').value;
       const item = document.getElementById('expNamaItem').value;
       const nominal = document.getElementById('expNominal').value;
@@ -522,7 +619,7 @@
         }
       }
 
-      await db.from('expenses').insert([{
+      const { error } = await db.from('expenses').insert([{
         trip_id: tripId,
         kategori: kategori,
         nama_item: item,
@@ -532,49 +629,10 @@
         bukti_url: buktiUrl
       }]);
 
+      if (error) return alert('Gagal mencatat sub-expense: ' + error.message);
+
       alert('Sub-Expense berhasil dicatat!');
       document.getElementById('expenseForm').reset();
-      fetchAppData();
-    }
-
-    // FITUR ADMIN: BUAT KATEGORI EXPENSE BARU
-    async function handleCreateNewCategory() {
-      const nama = document.getElementById('newCategoryName').value.trim();
-      if (!nama) return alert('Masukkan nama kategori!');
-
-      const { error } = await db.from('categories').insert([{ nama: nama }]);
-      if (error) return alert('Gagal menambah kategori: ' + error.message);
-
-      alert('Kategori baru berhasil ditambahkan!');
-      document.getElementById('newCategoryName').value = '';
-      fetchAppData();
-    }
-
-    async function handleDeleteCategory(catId) {
-      if (!catId) return;
-      if (confirm('Hapus kategori ini?')) {
-        await db.from('categories').delete().eq('id', catId);
-        fetchAppData();
-      }
-    }
-
-    async function handleCreateNewTrip() {
-      const judul = document.getElementById('newTripTitle').value.trim();
-      if (!judul) return alert('Masukkan judul trip!');
-
-      await db.from('trips').insert([{ judul: judul, created_by: currentUser.email }]);
-      alert('Trip baru berhasil dibuat!');
-      document.getElementById('newTripTitle').value = '';
-      fetchAppData();
-    }
-
-    // FITUR ADMIN: SAVE ASSIGN USER KE TRIP YANG DIPILIH
-    async function saveTripParticipants() {
-      const selectedTripId = document.getElementById('adminTripSelectForAssign').value;
-      const selectedEmails = Array.from(document.querySelectorAll('.admin-trip-user-chk:checked')).map(c => c.value);
-      
-      await db.from('trips').update({ active_participant_emails: selectedEmails }).eq('id', selectedTripId);
-      alert('Daftar peserta yang di-assign ke trip berhasil disimpan!');
       fetchAppData();
     }
 
@@ -661,27 +719,6 @@
     async function approvePay(payId, status) {
       await db.from('settlement_payments').update({ status: status }).eq('id', payId);
       alert(`Status pembayaran berhasil diubah menjadi: ${status}`);
-      fetchAppData();
-    }
-
-    function toggleQuickAddUserModal() {
-      document.getElementById('quickAddUserModal').classList.toggle('hidden');
-    }
-
-    async function saveNewUserFromModal() {
-      const nama = document.getElementById('newUserName').value.trim();
-      const email = document.getElementById('newUserEmail').value.trim();
-      const role = document.getElementById('newUserRole').value;
-
-      if (!nama || !email) return alert('Lengkapi nama dan email user!');
-
-      const { error } = await db.from('users').insert([{ nama: nama, email: email, role: role }]);
-      if (error) return alert('Gagal menambah user: ' + error.message);
-
-      alert('User baru berhasil ditambahkan!');
-      toggleQuickAddUserModal();
-      document.getElementById('newUserName').value = '';
-      document.getElementById('newUserEmail').value = '';
       fetchAppData();
     }
 
