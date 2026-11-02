@@ -123,7 +123,7 @@
             <h3 class="font-bold text-slate-800 flex items-center gap-2">
               <i class="ri-receipt-line text-indigo-600"></i> Buat Sub-Expense Baru
             </h3>
-            <p class="text-xs text-slate-500">Pilih peserta terdaftar atau tambahkan nama peserta baru</p>
+            <p class="text-xs text-slate-500">Pilih trip, kategori, dan peserta yang berpartisipasi</p>
           </div>
           <button onclick="toggleQuickAddUserModal()" class="px-3 py-1.5 bg-indigo-50 hover:bg-indigo-100 text-indigo-700 text-xs font-bold rounded-xl border border-indigo-200 flex items-center gap-1">
             <i class="ri-user-add-line"></i> + Buat User Baru
@@ -131,6 +131,21 @@
         </div>
 
         <form id="expenseForm" onsubmit="handleExpenseSubmit(event)" class="space-y-4">
+          
+          <!-- PILIH TRIP & KATEGORI -->
+          <div class="grid grid-cols-1 md:grid-cols-2 gap-4">
+            <div class="space-y-1">
+              <label class="text-xs font-semibold text-slate-700">Pilih Judul Trip / Event</label>
+              <select id="expTripSelect" onchange="onSelectTripForExpenseChange()" required class="w-full px-3 py-2 text-sm border border-slate-300 rounded-xl font-bold text-indigo-700 focus:ring-2 focus:ring-indigo-500 focus:outline-none">
+              </select>
+            </div>
+            <div class="space-y-1">
+              <label class="text-xs font-semibold text-slate-700">Pilih Kategori Expense</label>
+              <select id="expKategoriSelect" required class="w-full px-3 py-2 text-sm border border-slate-300 rounded-xl font-semibold text-slate-700 focus:ring-2 focus:ring-indigo-500 focus:outline-none">
+              </select>
+            </div>
+          </div>
+
           <div class="grid grid-cols-1 md:grid-cols-3 gap-4">
             <div class="md:col-span-2 space-y-1">
               <label class="text-xs font-semibold text-slate-700">Nama Sub-Pengeluaran / Item</label>
@@ -193,16 +208,16 @@
         <div id="riwayatListContainer" class="divide-y divide-slate-100"></div>
       </section>
 
-      <!-- PAGE 4: ADMIN SETUP -->
+      <!-- PAGE 4: ADMIN SETUP (KHUSUS ADMIN) -->
       <section id="page-admin" class="page-content hidden bg-white p-5 rounded-2xl shadow-sm border border-slate-200 space-y-6">
         <div class="border-b pb-3 border-slate-100">
           <h3 class="font-bold text-slate-800 flex items-center gap-2 text-amber-700">
             <i class="ri-settings-4-line"></i> Master Setup (Khusus Admin)
           </h3>
-          <p class="text-xs text-slate-500">Kelola Trip baru dan persetujuan anggota aktif per trip</p>
+          <p class="text-xs text-slate-500">Kelola Trip baru, kategori expense, dan assign user per trip</p>
         </div>
 
-        <!-- BUAT TRIP BARU -->
+        <!-- 1. BUAT TRIP BARU -->
         <div class="p-4 bg-amber-50/60 border border-amber-200 rounded-2xl space-y-3">
           <h4 class="text-xs font-bold text-slate-800 uppercase tracking-wider">1. Buat Judul Trip Utama Baru</h4>
           <div class="flex gap-2">
@@ -213,13 +228,33 @@
           </div>
         </div>
 
-        <!-- SETUP ANGGOTA AKTIF PER TRIP -->
+        <!-- 2. TAMBAH KATEGORI EXPENSE -->
+        <div class="p-4 bg-emerald-50/60 border border-emerald-200 rounded-2xl space-y-3">
+          <h4 class="text-xs font-bold text-slate-800 uppercase tracking-wider">2. Buat Kategori Expense Baru</h4>
+          <div class="flex gap-2">
+            <input type="text" id="newCategoryName" placeholder="Misal: Bensin, Tiket, Penginapan" class="flex-1 px-3 py-2 text-xs border border-slate-300 rounded-xl focus:outline-none">
+            <button onclick="handleCreateNewCategory()" class="px-4 py-2 bg-emerald-600 hover:bg-emerald-700 text-white font-bold text-xs rounded-xl shadow-sm shrink-0">
+              + Tambah Kategori
+            </button>
+          </div>
+          <div id="adminCategoryList" class="flex flex-wrap gap-1.5 pt-1"></div>
+        </div>
+
+        <!-- 3. ASSIGN USER KE LIST TRIP TERTEKATU -->
         <div class="p-4 bg-indigo-50/60 border border-indigo-200 rounded-2xl space-y-3">
-          <h4 class="text-xs font-bold text-slate-800 uppercase tracking-wider">2. Setup Anggota Aktif Untuk Trip Saat Ini</h4>
-          <p class="text-xs text-slate-500">Centang user yang berpartisipasi dalam event ini agar muncul pada checklist pencatatan expense.</p>
-          <div id="adminTripParticipantsChecklist" class="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 gap-2"></div>
+          <h4 class="text-xs font-bold text-slate-800 uppercase tracking-wider">3. Assign User Ke Trip Tertentu</h4>
+          <p class="text-xs text-slate-500">Pilih trip lalu centang user mana saja yang berpartisipasi dalam trip tersebut.</p>
+          
+          <div class="space-y-2">
+            <label class="text-xs font-semibold text-slate-700">Pilih Trip Yang Akan Di-setup:</label>
+            <select id="adminTripSelectForAssign" onchange="renderAdminUserAssignChecklist()" class="w-full px-3 py-2 text-xs border border-slate-300 rounded-xl font-bold text-indigo-700 focus:outline-none">
+            </select>
+          </div>
+
+          <div id="adminTripParticipantsChecklist" class="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 gap-2 pt-1"></div>
+          
           <button onclick="saveTripParticipants()" class="px-4 py-2 bg-indigo-600 hover:bg-indigo-700 text-white font-bold text-xs rounded-xl shadow-sm">
-            Simpan Anggota Trip
+            Simpan Assign User Ke Trip
           </button>
         </div>
       </section>
@@ -260,28 +295,26 @@
   <!-- SCRIPT ENGINE (SUPABASE CLIENT) -->
   <script>
     const SUPABASE_URL = 'https://htmmlzaxnbedweezhlyb.supabase.co';
-    const SUPABASE_KEY = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6Imh0bW1semF4bmJlZHdlZXpobHliIiwicm9sZSI6ImFub24iLCJpYXQiOjE3OTM1OTYwNjQsImV4cCI6MjEwOTE3MjA2NH0.HduOFDBtcTx4HbJ3IpLSeBQjZaxzZ2qj-v1DvbRU9Y4'; // Kunci Publishable Supabase Anda
+    const SUPABASE_KEY = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6Imh0bW1semF4bmJlZHdlZXpobHliIiwicm9sZSI6ImFub24iLCJpYXQiOjE3OTM1OTYwNjQsImV4cCI6MjEwOTE3MjA2NH0.HduOFDBtcTx4HbJ3IpLSeBQjZaxzZ2qj-v1DvbRU9Y4'; // Ganti dengan Full Anon Key Anda
     const db = supabase.createClient(SUPABASE_URL, SUPABASE_KEY, {
-    auth: {
-    flowType: 'pkce',
-    autoRefreshToken: true,
-    persistSession: true,
-    detectSessionInUrl: true
-    }
+      auth: {
+        flowType: 'pkce',
+        autoRefreshToken: true,
+        persistSession: true,
+        detectSessionInUrl: true
+      }
     });
 
     let currentUser = null;
-    let appData = { users: [], trips: [], activeTrip: null, expenses: [], payments: [] };
+    let appData = { users: [], trips: [], categories: [], activeTrip: null, expenses: [], payments: [] };
 
     window.addEventListener('DOMContentLoaded', async function() {
-      // Inisialisasi pendeteksi otomatis perubahan sesi autentikasi (mendukung redirect OAuth)
       db.auth.onAuthStateChange(async (event, session) => {
         if ((event === 'SIGNED_IN' || event === 'INITIAL_SESSION') && session) {
           await processAuthUser(session.user);
         }
       });
 
-      // Cek sesi lokal / awal
       const { data: { session } } = await db.auth.getSession();
       if (session && session.user) {
         await processAuthUser(session.user);
@@ -295,27 +328,21 @@
     });
 
     async function loginWithGoogle() {
-    // Bersihkan sesi lama yang error dari localStorage sebelum OAuth baru
-    localStorage.removeItem('gh_user_session');
-  
-    const redirectUri = window.location.origin + window.location.pathname;
-    const { error } = await db.auth.signInWithOAuth({
-    provider: 'google',
-    options: {
-      redirectTo: redirectUri
-    }
-    });
-    if (error) alert('Gagal login via Google: ' + error.message);
+      localStorage.removeItem('gh_user_session');
+      const redirectUri = window.location.origin + window.location.pathname;
+      const { error } = await db.auth.signInWithOAuth({
+        provider: 'google',
+        options: { redirectTo: redirectUri }
+      });
+      if (error) alert('Gagal login via Google: ' + error.message);
     }
 
     async function processAuthUser(authUser) {
       if (!authUser) return;
       const email = authUser.email;
 
-      // Ambil data dari tabel public.users
-      let { data: userRecord, error } = await db.from('users').select('*').eq('email', email).maybeSingle();
+      let { data: userRecord } = await db.from('users').select('*').eq('email', email).maybeSingle();
 
-      // Jika user belum ada di database, daftarkan otomatis
       if (!userRecord) {
         const newUser = {
           email: email,
@@ -323,7 +350,7 @@
           role: email === 'grahaagungitc@favehotels.com' ? 'ADMIN' : 'USER'
         };
 
-        const { data: created, error: insertErr } = await db.from('users').insert([newUser]).select().maybeSingle();
+        const { data: created } = await db.from('users').insert([newUser]).select().maybeSingle();
         userRecord = created || newUser;
       }
 
@@ -367,10 +394,12 @@
     async function fetchAppData() {
       const { data: users } = await db.from('users').select('*');
       const { data: trips } = await db.from('trips').select('*').order('created_at', { ascending: true });
+      const { data: categories } = await db.from('categories').select('*').order('nama', { ascending: true });
 
       const activeTrip = trips && trips.length > 0 ? trips[trips.length - 1] : null;
       appData.users = users || [];
       appData.trips = trips || [];
+      appData.categories = categories || [{ nama: 'Umum' }, { nama: 'Konsumsi' }, { nama: 'Transportasi' }];
       appData.activeTrip = activeTrip;
 
       if (activeTrip) {
@@ -387,45 +416,87 @@
     }
 
     function renderUI() {
-      // Hitung Total Pengeluaran Event Realtime
+      // Hitung Total Pengeluaran Event
       const totalNominal = appData.expenses.reduce((sum, item) => sum + (parseFloat(item.nominal) || 0), 0);
       const formattedTotal = 'Rp ' + totalNominal.toLocaleString('id-ID');
       
       document.getElementById('displayTotalEventNominal').innerText = formattedTotal;
       document.getElementById('riwayatTotalNominal').innerText = formattedTotal;
 
-      const activeEmails = appData.activeTrip ? (appData.activeTrip.active_participant_emails || []) : [];
-      
-      const eligibleUsers = activeEmails.length > 0 
-        ? appData.users.filter(u => activeEmails.includes(u.email))
-        : appData.users;
+      // 1. Render Dropdown Trip pada Form Expense
+      const expTripSelect = document.getElementById('expTripSelect');
+      expTripSelect.innerHTML = appData.trips.map(t => `
+        <option value="${t.id}" ${appData.activeTrip && appData.activeTrip.id === t.id ? 'selected' : ''}>${t.judul}</option>
+      `).join('');
 
-      // Dropdown Pembayar Di Awal
+      // 2. Render Dropdown Kategori pada Form Expense
+      const expKategoriSelect = document.getElementById('expKategoriSelect');
+      expKategoriSelect.innerHTML = appData.categories.map(c => `
+        <option value="${c.nama}">${c.nama}</option>
+      `).join('');
+
+      // 3. Render Dropdown Pembayar di Awal
       const pembayarSelect = document.getElementById('expPembayarSelect');
       pembayarSelect.innerHTML = appData.users.map(u => `
         <option value="${u.email}" ${u.email === currentUser.email ? 'selected' : ''}>${u.nama} (${u.email})</option>
       `).join('');
 
-      // Checklist Peserta Sub-Expense
+      // 4. Render Checklist Peserta untuk Trip Yang Dipilih
+      onSelectTripForExpenseChange();
+
+      // 5. Render Fitur Admin Setup jika role ADMIN
+      if (currentUser.role === 'ADMIN') {
+        // Render List Kategori
+        document.getElementById('adminCategoryList').innerHTML = appData.categories.map(c => `
+          <span class="px-2.5 py-1 bg-white border border-emerald-300 rounded-lg text-xs font-semibold text-emerald-800 flex items-center gap-1">
+            ${c.nama}
+            <i onclick="handleDeleteCategory('${c.id}')" class="ri-close-circle-fill text-emerald-500 hover:text-red-500 cursor-pointer"></i>
+          </span>
+        `).join('');
+
+        // Render Select Trip For Assign
+        const adminTripSelect = document.getElementById('adminTripSelectForAssign');
+        adminTripSelect.innerHTML = appData.trips.map(t => `
+          <option value="${t.id}" ${appData.activeTrip && appData.activeTrip.id === t.id ? 'selected' : ''}>${t.judul}</option>
+        `).join('');
+
+        renderAdminUserAssignChecklist();
+      }
+
+      renderSettlement();
+      renderRiwayat();
+    }
+
+    // Mengubah checklist peserta saat dropdown Trip di Form Catat Expense diganti
+    function onSelectTripForExpenseChange() {
+      const selectedTripId = document.getElementById('expTripSelect').value;
+      const targetTrip = appData.trips.find(t => t.id === selectedTripId) || appData.activeTrip;
+      
+      const activeEmails = targetTrip ? (targetTrip.active_participant_emails || []) : [];
+      const eligibleUsers = activeEmails.length > 0 
+        ? appData.users.filter(u => activeEmails.includes(u.email))
+        : appData.users;
+
       document.getElementById('expPesertaChecklist').innerHTML = eligibleUsers.map(u => `
         <label class="flex items-center p-2.5 bg-slate-50 border border-slate-200 rounded-xl cursor-pointer hover:bg-indigo-50/40">
           <input type="checkbox" value="${u.email}" checked class="exp-chk-peserta w-4 h-4 text-indigo-600 rounded">
           <span class="ml-2 text-xs font-medium text-slate-700 truncate">${u.nama}</span>
         </label>
       `).join('');
+    }
 
-      // Admin Trip Setup Checklist
-      if (currentUser.role === 'ADMIN') {
-        document.getElementById('adminTripParticipantsChecklist').innerHTML = appData.users.map(u => `
-          <label class="flex items-center p-2.5 bg-white border border-slate-200 rounded-xl cursor-pointer">
-            <input type="checkbox" value="${u.email}" ${activeEmails.includes(u.email) ? 'checked' : ''} class="admin-trip-user-chk w-4 h-4 text-indigo-600 rounded">
-            <span class="ml-2 text-xs font-medium text-slate-700 truncate">${u.nama} (${u.role})</span>
-          </label>
-        `).join('');
-      }
+    // Render Checklist User yang Di-assign pada Menu Admin
+    function renderAdminUserAssignChecklist() {
+      const selectedTripId = document.getElementById('adminTripSelectForAssign').value;
+      const targetTrip = appData.trips.find(t => t.id === selectedTripId);
+      const activeEmails = targetTrip ? (targetTrip.active_participant_emails || []) : [];
 
-      renderSettlement();
-      renderRiwayat();
+      document.getElementById('adminTripParticipantsChecklist').innerHTML = appData.users.map(u => `
+        <label class="flex items-center p-2.5 bg-white border border-slate-200 rounded-xl cursor-pointer">
+          <input type="checkbox" value="${u.email}" ${activeEmails.includes(u.email) ? 'checked' : ''} class="admin-trip-user-chk w-4 h-4 text-indigo-600 rounded">
+          <span class="ml-2 text-xs font-medium text-slate-700 truncate">${u.nama} (${u.role})</span>
+        </label>
+      `).join('');
     }
 
     async function handleExpenseSubmit(e) {
@@ -433,6 +504,8 @@
       const selectedPeserta = Array.from(document.querySelectorAll('.exp-chk-peserta:checked')).map(c => c.value);
       if (!selectedPeserta.length) return alert('Pilih minimal 1 peserta!');
 
+      const tripId = document.getElementById('expTripSelect').value;
+      const kategori = document.getElementById('expKategoriSelect').value;
       const item = document.getElementById('expNamaItem').value;
       const nominal = document.getElementById('expNominal').value;
       const pembayarEmail = document.getElementById('expPembayarSelect').value;
@@ -450,7 +523,8 @@
       }
 
       await db.from('expenses').insert([{
-        trip_id: appData.activeTrip.id,
+        trip_id: tripId,
+        kategori: kategori,
         nama_item: item,
         nominal: parseFloat(nominal),
         pembayar_email: pembayarEmail,
@@ -460,6 +534,47 @@
 
       alert('Sub-Expense berhasil dicatat!');
       document.getElementById('expenseForm').reset();
+      fetchAppData();
+    }
+
+    // FITUR ADMIN: BUAT KATEGORI EXPENSE BARU
+    async function handleCreateNewCategory() {
+      const nama = document.getElementById('newCategoryName').value.trim();
+      if (!nama) return alert('Masukkan nama kategori!');
+
+      const { error } = await db.from('categories').insert([{ nama: nama }]);
+      if (error) return alert('Gagal menambah kategori: ' + error.message);
+
+      alert('Kategori baru berhasil ditambahkan!');
+      document.getElementById('newCategoryName').value = '';
+      fetchAppData();
+    }
+
+    async function handleDeleteCategory(catId) {
+      if (!catId) return;
+      if (confirm('Hapus kategori ini?')) {
+        await db.from('categories').delete().eq('id', catId);
+        fetchAppData();
+      }
+    }
+
+    async function handleCreateNewTrip() {
+      const judul = document.getElementById('newTripTitle').value.trim();
+      if (!judul) return alert('Masukkan judul trip!');
+
+      await db.from('trips').insert([{ judul: judul, created_by: currentUser.email }]);
+      alert('Trip baru berhasil dibuat!');
+      document.getElementById('newTripTitle').value = '';
+      fetchAppData();
+    }
+
+    // FITUR ADMIN: SAVE ASSIGN USER KE TRIP YANG DIPILIH
+    async function saveTripParticipants() {
+      const selectedTripId = document.getElementById('adminTripSelectForAssign').value;
+      const selectedEmails = Array.from(document.querySelectorAll('.admin-trip-user-chk:checked')).map(c => c.value);
+      
+      await db.from('trips').update({ active_participant_emails: selectedEmails }).eq('id', selectedTripId);
+      alert('Daftar peserta yang di-assign ke trip berhasil disimpan!');
       fetchAppData();
     }
 
@@ -479,7 +594,8 @@
               <div class="p-4 bg-white border border-slate-200 rounded-2xl space-y-3 shadow-sm">
                 <div class="flex items-center justify-between">
                   <div>
-                    <p class="text-xs text-slate-400">Sub Item: <strong>${exp.nama_item}</strong></p>
+                    <span class="text-[10px] font-bold text-indigo-600 bg-indigo-50 px-2 py-0.5 rounded-md">${exp.kategori || 'Umum'}</span>
+                    <p class="text-xs text-slate-400 mt-0.5">Sub Item: <strong>${exp.nama_item}</strong></p>
                     <p class="text-sm font-bold text-slate-800">${pEmail.split('@')[0]} ➔ ${exp.pembayar_email.split('@')[0]} (Dibayar di awal)</p>
                   </div>
                   <p class="text-base font-extrabold text-amber-600">Rp ${perOrang.toLocaleString('id-ID')}</p>
@@ -548,23 +664,6 @@
       fetchAppData();
     }
 
-    async function handleCreateNewTrip() {
-      const judul = document.getElementById('newTripTitle').value.trim();
-      if (!judul) return alert('Masukkan judul trip!');
-
-      await db.from('trips').insert([{ judul: judul, created_by: currentUser.email }]);
-      alert('Trip baru berhasil dibuat!');
-      document.getElementById('newTripTitle').value = '';
-      fetchAppData();
-    }
-
-    async function saveTripParticipants() {
-      const selectedEmails = Array.from(document.querySelectorAll('.admin-trip-user-chk:checked')).map(c => c.value);
-      await db.from('trips').update({ active_participant_emails: selectedEmails }).eq('id', appData.activeTrip.id);
-      alert('Daftar peserta aktif trip berhasil diperbarui!');
-      fetchAppData();
-    }
-
     function toggleQuickAddUserModal() {
       document.getElementById('quickAddUserModal').classList.toggle('hidden');
     }
@@ -594,7 +693,8 @@
       document.getElementById('riwayatListContainer').innerHTML = appData.expenses.map(e => `
         <div class="py-3 flex items-center justify-between">
           <div>
-            <p class="text-sm font-bold text-slate-800">${e.nama_item}</p>
+            <span class="text-[10px] font-bold text-indigo-600 bg-indigo-50 px-2 py-0.5 rounded-md">${e.kategori || 'Umum'}</span>
+            <p class="text-sm font-bold text-slate-800 mt-0.5">${e.nama_item}</p>
             <p class="text-xs text-slate-500">Dibayar di awal oleh: ${e.pembayar_email.split('@')[0]} • ${e.peserta_emails.length} Anggota</p>
           </div>
           <p class="text-sm font-extrabold text-slate-900">Rp ${parseFloat(e.nominal).toLocaleString('id-ID')}</p>
@@ -608,7 +708,7 @@
       text += `Total Pengeluaran: Rp ${totalNominal.toLocaleString('id-ID')}\n\n`;
       text += `*Rincian Sub-Expense:*\n`;
       appData.expenses.forEach((e, idx) => {
-        text += `${idx + 1}. ${e.nama_item} - Rp ${parseFloat(e.nominal).toLocaleString('id-ID')} (Dibayar: ${e.pembayar_email.split('@')[0]})\n`;
+        text += `${idx + 1}. [${e.kategori || 'Umum'}] ${e.nama_item} - Rp ${parseFloat(e.nominal).toLocaleString('id-ID')} (Dibayar: ${e.pembayar_email.split('@')[0]})\n`;
       });
       
       const url = `https://wa.me/?text=${encodeURIComponent(text)}`;
