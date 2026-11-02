@@ -3,7 +3,7 @@
 <head>
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
-  <title>Trip & Event Expense Tracker</title>
+  <title>Trip Event Expense Tracker</title>
   <script src="https://cdn.tailwindcss.com"></script>
   <link href="https://cdn.jsdelivr.net/npm/remixicon@3.5.0/fonts/remixicon.css" rel="stylesheet">
   <!-- Supabase JS SDK -->
@@ -33,7 +33,7 @@
     </div>
   </div>
 
-  <!-- MODAL VIEW STRUK / BUKTI BAYAR + DOWNLOAD -->
+  <!-- MODAL VIEW STRUK / SINGLE MEDIA + DOWNLOAD -->
   <div id="viewMediaModal" class="hidden fixed inset-0 bg-slate-900/70 backdrop-blur-md z-[80] flex items-center justify-center p-4">
     <div class="bg-white rounded-3xl p-5 max-w-lg w-full space-y-4 shadow-2xl border border-slate-100 flex flex-col max-h-[90vh]">
       <div class="flex items-center justify-between border-b pb-3 border-slate-100">
@@ -58,6 +58,32 @@
         <a id="btnDownloadMedia" href="" download target="_blank" class="px-4 py-2 bg-indigo-600 hover:bg-indigo-700 text-white text-xs font-bold rounded-xl transition shadow-md flex items-center gap-1.5">
           <i class="ri-download-2-line"></i> Download File
         </a>
+      </div>
+    </div>
+  </div>
+
+  <!-- MODAL MULTI-BUKTI PREVIEW (CARD TOTAL SUMMARY) -->
+  <div id="multiBuktiModal" class="hidden fixed inset-0 bg-slate-900/70 backdrop-blur-md z-[80] flex items-center justify-center p-4">
+    <div class="bg-white rounded-3xl p-5 max-w-2xl w-full space-y-4 shadow-2xl border border-slate-100 flex flex-col max-h-[90vh]">
+      <div class="flex items-center justify-between border-b pb-3 border-slate-100">
+        <div class="flex items-center gap-2">
+          <i class="ri-gallery-line text-indigo-600 text-xl"></i>
+          <div>
+            <h4 id="multiBuktiModalTitle" class="font-bold text-slate-900 text-sm">Daftar Bukti Transfer</h4>
+            <p class="text-[11px] text-slate-500">Semua bukti pembayaran per child expense untuk pasangan ini</p>
+          </div>
+        </div>
+        <button onclick="closeMultiBuktiModal()" class="w-8 h-8 rounded-full bg-slate-100 hover:bg-slate-200 text-slate-500 flex items-center justify-center transition">
+          <i class="ri-close-line text-lg"></i>
+        </button>
+      </div>
+      
+      <div id="multiBuktiListContainer" class="flex-1 overflow-y-auto space-y-3 custom-scrollbar pr-1"></div>
+
+      <div class="flex items-center justify-end border-t pt-3 border-slate-100">
+        <button onclick="closeMultiBuktiModal()" class="px-4 py-2 bg-slate-100 hover:bg-slate-200 text-slate-700 text-xs font-bold rounded-xl transition">
+          Tutup
+        </button>
       </div>
     </div>
   </div>
@@ -400,6 +426,7 @@
       document.getElementById('customModal').classList.add('hidden');
     }
 
+    // MODAL VIEW BUKTI / MEDIA TUNGGAL
     function openMediaModal(url, title = 'Struk / Bukti') {
       if (!url) return showToast('File belum diunggah!', 'error');
 
@@ -429,6 +456,55 @@
       document.getElementById('viewMediaModal').classList.add('hidden');
       document.getElementById('mediaImagePreview').src = '';
       document.getElementById('mediaPdfPreview').src = '';
+    }
+
+    // MODAL VIEW MULTI BUKTI PAYMENT PER CHILD UNTUK PARENT CARD SUMMARY
+    function openMultiBuktiModal(dariEmail, keEmail, childExpenses) {
+      const dariNama = getUserNameByEmail(dariEmail);
+      const keNama = getUserNameByEmail(keEmail);
+
+      document.getElementById('multiBuktiModalTitle').innerText = `Bukti TF: ${dariNama} ➔ ${keNama}`;
+      const container = document.getElementById('multiBuktiListContainer');
+
+      let listHtml = '';
+      let countFound = 0;
+
+      childExpenses.forEach(item => {
+        const pay = appData.payments.find(p => p.expense_id === item.exp.id && p.dari_email.toLowerCase() === dariEmail.toLowerCase());
+        if (pay && pay.bukti_url) {
+          countFound++;
+          listHtml += `
+            <div class="p-3 bg-slate-50 border border-slate-200 rounded-2xl flex flex-col sm:flex-row sm:items-center justify-between gap-3">
+              <div>
+                <span class="text-[9px] font-bold text-indigo-600 bg-indigo-50 border border-indigo-100 px-2 py-0.5 rounded-md inline-block mb-1">${item.exp.kategori || 'Umum'}</span>
+                <p class="text-xs font-bold text-slate-800">${item.exp.nama_item}</p>
+                <p class="text-[11px] font-bold text-amber-600">Rp ${item.perOrang.toLocaleString('id-ID')} <span class="text-slate-400 font-normal">(${pay.status})</span></p>
+              </div>
+
+              <div class="flex items-center gap-2 shrink-0">
+                <button onclick="openMediaModal('${pay.bukti_url}', 'Bukti TF: ${item.exp.nama_item}')" class="px-3 py-1.5 bg-indigo-50 hover:bg-indigo-100 text-indigo-700 font-bold text-xs rounded-xl flex items-center gap-1">
+                  <i class="ri-eye-line"></i> Lihat
+                </button>
+                <a href="${pay.bukti_url}" download target="_blank" class="px-3 py-1.5 bg-emerald-600 hover:bg-emerald-700 text-white font-bold text-xs rounded-xl flex items-center gap-1">
+                  <i class="ri-download-2-line"></i> Download
+                </a>
+              </div>
+            </div>
+          `;
+        }
+      });
+
+      if (countFound === 0) {
+        container.innerHTML = `<div class="text-center py-8 text-xs text-slate-400">Belum ada file bukti bayar yang diunggah untuk rincian ini.</div>`;
+      } else {
+        container.innerHTML = listHtml;
+      }
+
+      document.getElementById('multiBuktiModal').classList.remove('hidden');
+    }
+
+    function closeMultiBuktiModal() {
+      document.getElementById('multiBuktiModal').classList.add('hidden');
     }
 
     function getUserNameByEmail(email) {
@@ -643,7 +719,7 @@
       `).join('');
     }
 
-    // RENDER TERSTRUKTUR PARENT (TRIP) & CHILD (TABEL EXPENSES SEPARATED COLUMNS)
+    // RENDER TERSTRUKTUR PARENT & CHILD TABEL DENGAN VIEW BUKTI LENGKAP & RE-UPLOAD
     function renderStructuredSettlement() {
       const container = document.getElementById('settlementListContainer');
       if (!appData.trips.length) return container.innerHTML = `<div class="text-center py-6 text-xs text-slate-400">Belum ada trip yang dibuat.</div>`;
@@ -691,7 +767,7 @@
           return;
         }
 
-        // SECTION 1: RINGKASAN TOTAL SETTLEMENT (SUMMARY CARD PER PAIR)
+        // SECTION 1: CARD RINGKASAN TOTAL SETTLEMENT
         mainHtml += `
           <div class="space-y-3">
             <h5 class="text-xs font-extrabold text-slate-700 uppercase tracking-wider flex items-center gap-1.5">
@@ -707,7 +783,7 @@
           let allApproved = true;
           let anyPending = false;
           let hasUploadedProof = false;
-          let summaryBuktiUrl = '';
+          let totalUploadedCount = 0;
 
           summary.childExpenses.forEach(item => {
             const pay = appData.payments.find(p => p.expense_id === item.exp.id && p.dari_email.toLowerCase() === summary.dariEmail.toLowerCase());
@@ -715,22 +791,24 @@
             if (pay && pay.status === 'PENDING_APPROVAL') anyPending = true;
             if (pay && pay.bukti_url && pay.bukti_url !== '') {
               hasUploadedProof = true;
-              summaryBuktiUrl = pay.bukti_url;
+              totalUploadedCount++;
             }
           });
 
           const isUserYangBayarAwal = currentUser.email.toLowerCase() === summary.keEmail.toLowerCase();
           const isUserPengutang = currentUser.email.toLowerCase() === summary.dariEmail.toLowerCase();
           
-          // Tombol Approve Parent HANYA MUNCUL setelah ada Bukti Upload (PENDING/PROSES APPROVAL)
           const canApproveParent = (currentUser.role === 'ADMIN' || isUserYangBayarAwal) && hasUploadedProof && !allApproved;
+
+          // Encode data childExpenses untuk diparse ke modal multi-bukti
+          const childExpensesJson = JSON.stringify(summary.childExpenses).replace(/"/g, '&quot;');
 
           mainHtml += `
             <div class="p-4 bg-gradient-to-br from-indigo-50/70 to-slate-50 border border-indigo-100 rounded-2xl space-y-3">
               <div class="flex items-center justify-between">
                 <div>
                   <p class="text-xs font-bold text-slate-800">${dariNama} <span class="text-indigo-600 font-semibold">➔ Bayar ke</span> ${keNama}</p>
-                  <p class="text-[11px] text-slate-400">Total ${summary.childExpenses.length} transaksi</p>
+                  <p class="text-[11px] text-slate-400">Total ${summary.childExpenses.length} transaksi (${totalUploadedCount} ada bukti)</p>
                 </div>
                 <p class="text-base font-extrabold text-indigo-700">Rp ${summary.totalNominal.toLocaleString('id-ID')}</p>
               </div>
@@ -742,9 +820,10 @@
                     anyPending ? 'bg-amber-100 text-amber-800 border border-amber-200' : 'bg-red-100 text-red-600 border border-red-200'
                   }">${allApproved ? 'COMPLETE / APPROVED' : anyPending ? 'PROSES APPROVAL' : 'BELUM DIBAYAR'}</span>
                   
-                  ${summaryBuktiUrl ? `
-                    <button onclick="openMediaModal('${summaryBuktiUrl}', 'Bukti Total Transfer: ${dariNama}')" class="px-2 py-0.5 bg-indigo-100 hover:bg-indigo-200 text-indigo-700 rounded-lg text-[10px] font-bold flex items-center gap-1">
-                      <i class="ri-file-search-line"></i> Lihat Bukti
+                  <!-- TOMBOL BUKA MULTI-BUKTI UNTUK SEMUA USER/ADMIN -->
+                  ${hasUploadedProof ? `
+                    <button onclick="openMultiBuktiModal('${summary.dariEmail}', '${summary.keEmail}', ${childExpensesJson})" class="px-2 py-0.5 bg-indigo-100 hover:bg-indigo-200 text-indigo-700 rounded-lg text-[10px] font-bold flex items-center gap-1">
+                      <i class="ri-gallery-line"></i> Lihat Bukti (${totalUploadedCount})
                     </button>
                   ` : ''}
                 </div>
@@ -752,7 +831,7 @@
                 <div class="flex items-center gap-1.5">
                   ${(isUserPengutang || currentUser.role === 'ADMIN') && !allApproved ? `
                     <label class="cursor-pointer px-2.5 py-1 bg-white border border-indigo-300 hover:bg-indigo-50 text-indigo-700 text-[10px] font-bold rounded-lg shadow-sm flex items-center gap-1">
-                      <i class="ri-upload-2-line"></i> Upload Bukti
+                      <i class="ri-upload-2-line"></i> ${hasUploadedProof ? 'Re-Upload Bukti' : 'Upload Bukti'}
                       <input type="file" accept="image/*,application/pdf" class="hidden" onchange="handleUploadBulkProof(event, '${trip.id}', '${summary.dariEmail}', '${summary.keEmail}', ${summary.totalNominal})">
                     </label>
                   ` : ''}
@@ -770,7 +849,7 @@
 
         mainHtml += `</div></div>`; // End Summary Grid
 
-        // SECTION 2: RINCIAN CHILD EXPENSES DALAM BENTUK TABEL (DIPISAH: STRUK & BUKTI TF)
+        // SECTION 2: TABEL RINCIAN CHILD EXPENSES
         mainHtml += `
           <div class="space-y-3 pt-2">
             <h5 class="text-xs font-extrabold text-slate-700 uppercase tracking-wider flex items-center gap-1.5">
@@ -828,30 +907,41 @@
                     }">${status === 'APPROVED' ? 'COMPLETE' : status === 'PENDING_APPROVAL' ? 'PROSES APPROVAL' : 'BELUM DIBAYAR'}</span>
                   </td>
                   
-                  <!-- KOLOM 1: STRUK / NOTA PEMBELIAN -->
+                  <!-- KOLOM 1: STRUK / NOTA + EDIT STRUK -->
                   <td class="p-3 text-center">
-                    ${exp.bukti_url ? `
-                      <button onclick="openMediaModal('${exp.bukti_url}', 'Struk: ${exp.nama_item}')" class="px-2 py-1 bg-slate-100 hover:bg-slate-200 text-indigo-600 rounded-lg font-bold text-[10px] flex items-center justify-center gap-1 mx-auto" title="Lihat Struk">
-                        <i class="ri-receipt-line"></i> Struk
-                      </button>
-                    ` : '<span class="text-[10px] text-slate-300 italic">Tidak Ada</span>'}
+                    <div class="flex items-center justify-center gap-1">
+                      ${exp.bukti_url ? `
+                        <button onclick="openMediaModal('${exp.bukti_url}', 'Struk: ${exp.nama_item}')" class="px-2 py-1 bg-slate-100 hover:bg-slate-200 text-indigo-600 rounded-lg font-bold text-[10px] flex items-center gap-1" title="Lihat Struk">
+                          <i class="ri-receipt-line"></i> Struk
+                        </button>
+                      ` : '<span class="text-[10px] text-slate-300 italic">Belum Ada</span>'}
+
+                      ${currentUser.role === 'ADMIN' || isUserYangBayarAwal ? `
+                        <label class="cursor-pointer p-1 text-slate-400 hover:text-indigo-600" title="Edit Struk Nota">
+                          <i class="ri-edit-line text-xs"></i>
+                          <input type="file" accept="image/*,application/pdf" class="hidden" onchange="handleEditStrukExpense(event, '${exp.id}')">
+                        </label>
+                      ` : ''}
+                    </div>
                   </td>
 
-                  <!-- KOLOM 2: BUKTI BAYAR (TRANSFER SETTLEMENT) -->
+                  <!-- KOLOM 2: BUKTI BAYAR (TF) + EDIT BUKTI -->
                   <td class="p-3 text-center">
-                    ${pay && pay.bukti_url ? `
-                      <button onclick="openMediaModal('${pay.bukti_url}', 'Bukti TF: ${pNama}')" class="px-2 py-1 bg-emerald-50 hover:bg-emerald-100 text-emerald-700 rounded-lg font-bold text-[10px] flex items-center justify-center gap-1 mx-auto" title="Lihat Bukti Transfer">
-                        <i class="ri-file-check-line"></i> Bukti TF
-                      </button>
-                    ` : '<span class="text-[10px] text-slate-300 italic">Belum Upload</span>'}
+                    <div class="flex items-center justify-center gap-1">
+                      ${hasChildProof ? `
+                        <button onclick="openMediaModal('${pay.bukti_url}', 'Bukti TF: ${pNama}')" class="px-2 py-1 bg-emerald-50 hover:bg-emerald-100 text-emerald-700 rounded-lg font-bold text-[10px] flex items-center gap-1" title="Lihat Bukti Transfer">
+                          <i class="ri-file-check-line"></i> Bukti TF
+                        </button>
+                      ` : '<span class="text-[10px] text-slate-300 italic">Belum Upload</span>'}
+                    </div>
                   </td>
 
-                  <!-- KOLOM AKSI: UPLOAD & APPROVE -->
+                  <!-- KOLOM AKSI: UPLOAD / RE-UPLOAD BUKTI TF & APPROVAL -->
                   <td class="p-3 text-right">
                     <div class="flex items-center justify-end gap-1">
-                      ${(isUserPengutang || currentUser.role === 'ADMIN') && status !== 'APPROVED' ? `
+                      ${(isUserPengutang || currentUser.role === 'ADMIN') ? `
                         <label class="cursor-pointer px-2 py-1 bg-indigo-50 hover:bg-indigo-100 text-indigo-700 font-bold text-[10px] rounded-lg border border-indigo-200">
-                          Upload Bukti
+                          ${hasChildProof ? 'Edit Bukti' : 'Upload Bukti'}
                           <input type="file" accept="image/*,application/pdf" class="hidden" onchange="handleUploadChildProof(event, '${exp.id}', '${exp.pembayar_email}', '${pEmail}', ${perOrang})">
                         </label>
                       ` : ''}
@@ -876,13 +966,34 @@
           </div>
         `;
 
-        mainHtml += `</div>`; // End Parent Container
+        mainHtml += `</div>`;
       });
 
       container.innerHTML = mainHtml;
     }
 
-    // HANDLER UPLOAD BULK/TOTAL BUKTI (OTOMATIS SET STATUS PENDING_APPROVAL)
+    // HANDLER EDIT STRUK / NOTA PENGELUARAN (OLEH ADMIN / PEMBAYAR AWAL)
+    async function handleEditStrukExpense(event, expId) {
+      const file = event.target.files[0];
+      if (!file) return;
+
+      showToast('Mengunggah nota/struk baru...', 'info');
+      const fileName = `receipt_${Date.now()}_${file.name}`;
+      
+      const { data, error: uploadErr } = await db.storage.from('receipts').upload(fileName, file);
+      if (uploadErr) return showToast('Gagal mengunggah nota: ' + uploadErr.message, 'error');
+
+      const { data: pubData } = db.storage.from('receipts').getPublicUrl(fileName);
+      const newStrukUrl = pubData.publicUrl;
+
+      const { error: updateErr } = await db.from('expenses').update({ bukti_url: newStrukUrl }).eq('id', expId);
+      if (updateErr) return showToast('Gagal memperbarui nota: ' + updateErr.message, 'error');
+
+      showToast('Nota/Struk pengeluaran berhasil diperbarui!', 'success');
+      fetchAppData();
+    }
+
+    // HANDLER UPLOAD / RE-UPLOAD BULK PROOF (AUTOMATIC PENDING_APPROVAL)
     async function handleUploadBulkProof(event, tripId, dariEmail, keEmail, totalNominal) {
       const file = event.target.files[0];
       if (!file) return;
@@ -922,11 +1033,11 @@
         }
       }
 
-      showToast('Bukti transfer berhasil diunggah! Status berubah ke PROSES APPROVAL.', 'success');
+      showToast('Bukti transfer diperbarui! Status berubah ke PROSES APPROVAL.', 'success');
       fetchAppData();
     }
 
-    // HANDLER UPLOAD CHILD BUKTI (OTOMATIS SET STATUS PENDING_APPROVAL)
+    // HANDLER UPLOAD / RE-UPLOAD CHILD PROOF (AUTOMATIC PENDING_APPROVAL)
     async function handleUploadChildProof(event, expId, keEmail, dariEmail, nominal) {
       const file = event.target.files[0];
       if (!file) return;
@@ -959,11 +1070,11 @@
         }]);
       }
 
-      showToast('Bukti transfer berhasil diunggah! Status berubah ke PROSES APPROVAL.', 'success');
+      showToast('Bukti transfer diperbarui! Status berubah ke PROSES APPROVAL.', 'success');
       fetchAppData();
     }
 
-    // APPROVE BULK/TOTAL SETTLEMENT (MENGUBAH STATUS MENJADI APPROVED/COMPLETE)
+    // APPROVE BULK/TOTAL SETTLEMENT
     function approveBulkSettlement(tripId, dariEmail, keEmail) {
       const dariNama = getUserNameByEmail(dariEmail);
       const keNama = getUserNameByEmail(keEmail);
