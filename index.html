@@ -281,29 +281,39 @@
     }
 
     async function checkGoogleSession() {
-      const { data: { session } } = await db.auth.getSession();
-      if (session && session.user) {
-        const email = session.user.email;
-        const { data: userRecord } = await db.from('users').select('*').eq('email', email).maybeSingle();
-        
-        if (userRecord) {
-          currentUser = userRecord;
-        } else {
-          currentUser = {
-            email: email,
-            nama: session.user.user_metadata.full_name || email.split('@')[0],
-            role: email === 'grahaagungitc@favehotels.com' ? 'ADMIN' : 'USER'
-          };
-        }
-        showDashboard();
-      } else {
-        const saved = localStorage.getItem('gh_user_session');
-        if (saved) {
-          currentUser = JSON.parse(saved);
-          showDashboard();
-        }
-      }
+  // 1. Tangkap sesi aktif dari Supabase Auth SDK
+  const { data: { session }, error } = await db.auth.getSession();
+  
+  if (session && session.user) {
+    const email = session.user.email;
+    
+    // Cari data user di tabel public.users Supabase
+    let { data: userRecord } = await db.from('users').select('*').eq('email', email).maybeSingle();
+    
+    // Jika user belum ada di database public.users, daftarkan otomatis
+    if (!userRecord) {
+      const newUser = {
+        email: email,
+        nama: session.user.user_metadata.full_name || session.user.user_metadata.name || email.split('@')[0],
+        role: email === 'grahaagungitc@favehotels.com' ? 'ADMIN' : 'USER'
+      };
+      
+      const { data: createdUser } = await db.from('users').insert([newUser]).select().maybeSingle();
+      userRecord = createdUser || newUser;
     }
+    
+    currentUser = userRecord;
+    localStorage.setItem('gh_user_session', JSON.stringify(currentUser));
+    showDashboard();
+  }
+}
+
+// Dengarkan perubahan auth state secara realtime
+db.auth.onAuthStateChange((event, session) => {
+  if (event === 'SIGNED_IN' && session) {
+    checkGoogleSession();
+  }
+});
 
     function showDashboard() {
       document.getElementById('loginScreen').classList.add('hidden');
