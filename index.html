@@ -281,40 +281,60 @@
     }
 
     async function checkGoogleSession() {
-  // 1. Tangkap sesi aktif dari Supabase Auth SDK
-  const { data: { session }, error } = await db.auth.getSession();
+  console.log("1. Memulai pengecekan sesi Google...");
   
+  // Tangkap Sesi
+  const { data: { session }, error: sessionError } = await db.auth.getSession();
+  
+  if (sessionError) {
+    console.error("Error GetSession:", sessionError.message);
+    return;
+  }
+
+  console.log("2. Data Session dari Supabase:", session);
+
   if (session && session.user) {
     const email = session.user.email;
+    console.log("3. User terdeteksi via Auth:", email);
     
-    // Cari data user di tabel public.users Supabase
-    let { data: userRecord } = await db.from('users').select('*').eq('email', email).maybeSingle();
+    // Query ke tabel public.users
+    const { data: userRecord, error: dbError } = await db.from('users').select('*').eq('email', email).maybeSingle();
     
-    // Jika user belum ada di database public.users, daftarkan otomatis
-    if (!userRecord) {
+    if (dbError) {
+      console.error("4. Error Database RLS/Query:", dbError.message);
+      alert("Error Database: " + dbError.message);
+      return;
+    }
+
+    console.log("5. Record User dari Database:", userRecord);
+    
+    if (userRecord) {
+      currentUser = userRecord;
+      localStorage.setItem('gh_user_session', JSON.stringify(currentUser));
+      showDashboard();
+    } else {
+      console.warn("6. Email tidak ditemukan di tabel users, mendaftarkan otomatis...");
+      // Auto register jika belum ada
       const newUser = {
         email: email,
         nama: session.user.user_metadata.full_name || session.user.user_metadata.name || email.split('@')[0],
         role: email === 'grahaagungitc@favehotels.com' ? 'ADMIN' : 'USER'
       };
       
-      const { data: createdUser } = await db.from('users').insert([newUser]).select().maybeSingle();
-      userRecord = createdUser || newUser;
+      const { data: created, error: insertError } = await db.from('users').insert([newUser]).select().maybeSingle();
+      if (insertError) {
+        console.error("Error Auto Insert User:", insertError.message);
+        alert("Gagal daftar user baru: " + insertError.message);
+        return;
+      }
+      currentUser = created || newUser;
+      localStorage.setItem('gh_user_session', JSON.stringify(currentUser));
+      showDashboard();
     }
-    
-    currentUser = userRecord;
-    localStorage.setItem('gh_user_session', JSON.stringify(currentUser));
-    showDashboard();
+  } else {
+    console.log("Sesi OAuth tidak ditemukan pada URL redirect ini.");
   }
 }
-
-// Dengarkan perubahan auth state secara realtime
-db.auth.onAuthStateChange((event, session) => {
-  if (event === 'SIGNED_IN' && session) {
-    checkGoogleSession();
-  }
-});
-
     function showDashboard() {
       document.getElementById('loginScreen').classList.add('hidden');
       document.getElementById('mainDashboard').classList.remove('hidden');
