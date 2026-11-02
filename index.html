@@ -1,0 +1,409 @@
+<!DOCTYPE html>
+<html lang="id">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Trip & Event Expense Tracker</title>
+  <script src="https://cdn.tailwindcss.com"></script>
+  <link href="https://cdn.jsdelivr.net/npm/remixicon@3.5.0/fonts/remixicon.css" rel="stylesheet">
+  <!-- Supabase JS SDK -->
+  <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
+</head>
+<body class="bg-slate-100 text-slate-800 font-sans min-h-screen">
+
+  <!-- SCREEN 1: ARCHIPELAGO SIGN IN -->
+  <div id="loginScreen" class="min-h-screen flex flex-col justify-between items-center p-4">
+    <div class="w-full max-w-md my-auto space-y-6">
+      
+      <div class="flex items-center justify-center space-x-3 mb-6">
+        <div class="w-12 h-12 bg-indigo-600 rounded-2xl flex items-center justify-center text-white text-2xl shadow-lg shadow-indigo-200">
+          <i class="ri-wallet-3-line"></i>
+        </div>
+        <h1 class="text-2xl font-extrabold text-slate-900 tracking-tight">Expense Tracker</h1>
+      </div>
+
+      <div class="bg-white p-8 rounded-3xl shadow-sm border border-slate-200 space-y-6">
+        <div class="space-y-1">
+          <p class="text-xs font-bold text-indigo-600 flex items-center gap-1.5">
+            <span class="w-2 h-2 rounded-full bg-indigo-600 inline-block"></span>
+            You'll continue to Expense App
+          </p>
+          <h2 class="text-3xl font-extrabold text-slate-900 tracking-tight">Sign in</h2>
+          <p class="text-xs text-slate-500 pt-1">
+            Masuk dengan akun terdaftar untuk mengakses aplikasi.
+          </p>
+        </div>
+
+        <button id="btnGoogleLogin" onclick="loginWithAccount()" class="w-full p-3.5 bg-white border border-slate-300 hover:border-indigo-500 rounded-2xl flex items-center justify-between transition group shadow-sm">
+          <div class="flex items-center space-x-3 text-left">
+            <div id="userAvatar" class="w-9 h-9 rounded-full bg-indigo-100 text-indigo-700 font-bold flex items-center justify-center shrink-0 border border-indigo-200">
+              A
+            </div>
+            <div class="overflow-hidden">
+              <p class="text-xs text-slate-400 font-medium leading-none">Continue as</p>
+              <p id="googleAccEmail" class="text-sm font-bold text-slate-800 truncate mt-1">grahaagungitc@favehotels.com</p>
+            </div>
+          </div>
+          <i class="ri-arrow-right-line text-slate-400 group-hover:text-indigo-600"></i>
+        </button>
+
+        <div id="loginError" class="hidden text-xs text-red-600 font-medium bg-red-50 p-3 rounded-xl border border-red-200 text-center"></div>
+      </div>
+
+      <div class="text-center text-xs text-slate-400">
+        Archipelago International © 2026
+      </div>
+    </div>
+  </div>
+
+  <!-- SCREEN 2: MAIN DASHBOARD -->
+  <div id="mainDashboard" class="hidden pb-12">
+    
+    <!-- TOP BAR HEADER -->
+    <header class="bg-indigo-600 text-white shadow-md sticky top-0 z-50">
+      <div class="max-w-4xl mx-auto px-4 py-3 flex items-center justify-between">
+        <div class="flex items-center space-x-3">
+          <i class="ri-wallet-3-line text-2xl text-amber-300"></i>
+          <div>
+            <h1 class="font-bold text-base md:text-lg leading-tight">Trip Expense Tracker</h1>
+            <p class="text-xs text-indigo-200" id="currentCaseTitle">Memuat Trip...</p>
+          </div>
+        </div>
+        <div class="flex items-center space-x-3">
+          <div class="text-right text-xs hidden sm:block">
+            <p class="font-semibold leading-none" id="userDisplayName">User</p>
+            <span class="text-[10px] text-amber-300 font-bold" id="userRoleBadge">ROLE</span>
+          </div>
+          <button onclick="doLogout()" class="p-2 bg-indigo-700 hover:bg-red-600 rounded-lg text-white text-xs transition flex items-center gap-1">
+            <i class="ri-logout-box-r-line text-base"></i>
+            <span class="hidden md:inline">Keluar</span>
+          </button>
+        </div>
+      </div>
+    </header>
+
+    <!-- CONTAINER DASHBOARD -->
+    <main class="max-w-4xl mx-auto px-4 mt-4 space-y-6">
+
+      <!-- EVENT BANNER -->
+      <div class="bg-white p-4 rounded-2xl shadow-sm border border-slate-200 flex flex-col md:flex-row md:items-center justify-between gap-3">
+        <div>
+          <span class="text-[10px] font-bold text-indigo-600 uppercase tracking-wider">EVENT AKTIF</span>
+          <h2 class="text-xl font-bold text-slate-900" id="displayCaseName">Trip Conference 2026</h2>
+          <p class="text-xs text-slate-500">Data terhubung dengan Supabase Realtime Database</p>
+        </div>
+        <div class="flex gap-2">
+          <button onclick="alert('Rekap disiapkan untuk WhatsApp')" class="px-3 py-2 bg-emerald-600 hover:bg-emerald-700 text-white text-xs font-semibold rounded-xl flex items-center justify-center gap-1 shadow-sm">
+            <i class="ri-whatsapp-line text-sm"></i> Share Rekap WA
+          </button>
+        </div>
+      </div>
+
+      <!-- TAB NAVIGATION -->
+      <div class="flex bg-slate-200/80 p-1 rounded-2xl text-xs sm:text-sm font-medium text-slate-600 overflow-x-auto">
+        <button id="tab-catat" onclick="switchTab('catat')" class="tab-btn flex-1 min-w-[110px] py-2.5 px-3 rounded-xl bg-white text-indigo-600 font-semibold shadow-sm flex items-center justify-center gap-1.5 transition">
+          <i class="ri-add-circle-line"></i> Catat Expense
+        </button>
+        <button id="tab-split" onclick="switchTab('split')" class="tab-btn flex-1 min-w-[110px] py-2.5 px-3 rounded-xl hover:text-slate-900 flex items-center justify-center gap-1.5 transition">
+          <i class="ri-calculator-line"></i> Split & Settlement
+        </button>
+        <button id="tab-riwayat" onclick="switchTab('riwayat')" class="tab-btn flex-1 min-w-[110px] py-2.5 px-3 rounded-xl hover:text-slate-900 flex items-center justify-center gap-1.5 transition">
+          <i class="ri-file-list-3-line"></i> Riwayat
+        </button>
+        <button id="tab-admin" onclick="switchTab('admin')" class="tab-btn flex-1 min-w-[110px] py-2.5 px-3 rounded-xl hover:text-slate-900 flex items-center justify-center gap-1.5 text-amber-700 hidden transition">
+          <i class="ri-settings-4-line"></i> Admin Setup
+        </button>
+      </div>
+
+      <!-- PAGE 1: CATAT EXPENSE -->
+      <section id="page-catat" class="page-content bg-white p-5 rounded-2xl shadow-sm border border-slate-200 space-y-4">
+        <div class="border-b pb-3 border-slate-100">
+          <h3 class="font-bold text-slate-800 flex items-center gap-2">
+            <i class="ri-receipt-line text-indigo-600"></i> Buat Sub-Expense Baru
+          </h3>
+          <p class="text-xs text-slate-500">Anda otomatis dicatat sebagai pembuat sub-expense yang berhak melakukan approval</p>
+        </div>
+
+        <form id="expenseForm" onsubmit="handleExpenseSubmit(event)" class="space-y-4">
+          <div class="grid grid-cols-1 md:grid-cols-3 gap-4">
+            <div class="md:col-span-2 space-y-1">
+              <label class="text-xs font-semibold text-slate-700">Nama Sub-Pengeluaran / Item</label>
+              <input type="text" id="expNamaItem" required placeholder="Misal: Dinner Jimbaran / Bensin Outing" class="w-full px-3 py-2 text-sm border border-slate-300 rounded-xl focus:ring-2 focus:ring-indigo-500 focus:outline-none">
+            </div>
+            <div class="space-y-1">
+              <label class="text-xs font-semibold text-slate-700">Total Nominal (Rp)</label>
+              <input type="number" id="expNominal" required placeholder="500000" class="w-full px-3 py-2 text-sm border border-slate-300 rounded-xl focus:ring-2 focus:ring-indigo-500 focus:outline-none font-semibold">
+            </div>
+          </div>
+
+          <div class="grid grid-cols-1 md:grid-cols-2 gap-4">
+            <div class="space-y-1">
+              <label class="text-xs font-semibold text-slate-700">Yang Membayar Di Awal (Pembuat Sub):</label>
+              <input type="text" id="expPembayarDisplay" readonly class="w-full px-3 py-2 text-sm bg-slate-100 border border-slate-300 rounded-xl font-bold text-indigo-700">
+            </div>
+            <div class="space-y-1">
+              <label class="text-xs font-semibold text-slate-700">Lampirkan Foto / Struk</label>
+              <input type="file" id="expBuktiFile" accept="image/*" class="w-full text-xs text-slate-500 border border-slate-300 rounded-xl p-1.5">
+            </div>
+          </div>
+
+          <div class="space-y-2 pt-2 border-t border-slate-100">
+            <label class="text-xs font-semibold text-slate-700">Peserta Terhitung Patungan:</label>
+            <div id="expPesertaChecklist" class="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 gap-2"></div>
+          </div>
+
+          <button type="submit" id="btnSaveSubExpense" class="w-full py-3 bg-indigo-600 hover:bg-indigo-700 text-white font-semibold text-sm rounded-xl shadow-md transition flex items-center justify-center gap-2">
+            <i class="ri-save-line"></i> Simpan Sub-Expense
+          </button>
+        </form>
+      </section>
+
+      <!-- PAGE 2: SPLIT & SETTLEMENT -->
+      <section id="page-split" class="page-content hidden bg-white p-5 rounded-2xl shadow-sm border border-slate-200 space-y-4">
+        <div class="border-b pb-3 border-slate-100">
+          <h3 class="font-bold text-slate-800 flex items-center gap-2">
+            <i class="ri-exchange-dollar-line text-emerald-600"></i> Split Settlement & Approval Status
+          </h3>
+          <p class="text-xs text-slate-500">Upload bukti transfer & approval oleh pembuat sub-expense</p>
+        </div>
+        <div id="settlementListContainer" class="space-y-3"></div>
+      </section>
+
+      <!-- PAGE 3: RIWAYAT -->
+      <section id="page-riwayat" class="page-content hidden bg-white p-5 rounded-2xl shadow-sm border border-slate-200 space-y-4">
+        <div class="border-b pb-3 border-slate-100">
+          <h3 class="font-bold text-slate-800 flex items-center gap-2">
+            <i class="ri-file-list-3-line text-indigo-600"></i> Riwayat Sub-Expense
+          </h3>
+        </div>
+        <div id="riwayatListContainer" class="divide-y divide-slate-100"></div>
+      </section>
+
+      <!-- PAGE 4: ADMIN SETUP -->
+      <section id="page-admin" class="page-content hidden bg-white p-5 rounded-2xl shadow-sm border border-slate-200 space-y-6">
+        <div class="border-b pb-3 border-slate-100">
+          <h3 class="font-bold text-slate-800 flex items-center gap-2 text-amber-700">
+            <i class="ri-settings-4-line"></i> Master Setup Admin
+          </h3>
+        </div>
+
+        <div class="p-4 bg-amber-50/60 border border-amber-200 rounded-2xl space-y-3">
+          <h4 class="text-xs font-bold text-slate-800 uppercase tracking-wider">Buat Judul Trip Utama Baru</h4>
+          <div class="flex gap-2">
+            <input type="text" id="newTripTitle" placeholder="Misal: Conference Outing Bali 2026" class="flex-1 px-3 py-2 text-xs border border-slate-300 rounded-xl focus:outline-none">
+            <button onclick="handleCreateNewTrip()" class="px-4 py-2 bg-amber-600 hover:bg-amber-700 text-white font-bold text-xs rounded-xl shadow-sm shrink-0">
+              Buat Trip Baru
+            </button>
+          </div>
+        </div>
+
+        <div class="p-3 bg-slate-50 border rounded-xl text-xs space-y-2">
+          <p class="font-semibold text-slate-800">Daftar User & Role System:</p>
+          <div id="adminUserList"></div>
+        </div>
+      </section>
+
+    </main>
+  </div>
+
+  <!-- SCRIPT ENGINE (SUPABASE INTEGRATION) -->
+  <script>
+    // PASTE SUPABASE CREDENTIALS ANDA DI SINI
+    const SUPABASE_URL = 'YOUR_SUPABASE_URL';
+    const SUPABASE_KEY = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6Imh0bW1semF4bmJlZHdlZXpobHliIiwicm9sZSI6ImFub24iLCJpYXQiOjE3OTM1OTYwNjQsImV4cCI6MjEwOTE3MjA2NH0.HduOFDBtcTx4HbJ3IpLSeBQjZaxzZ2qj-v1DvbRU9Y4';
+    const db = supabase.createClient(SUPABASE_URL, SUPABASE_KEY);
+
+    let currentUser = null;
+    let appData = { users: [], trips: [], activeTripId: null, expenses: [], payments: [] };
+
+    async function loginWithAccount() {
+      const targetEmail = 'grahaagungitc@favehotels.com';
+      const { data, error } = await db.from('users').select('*').eq('email', targetEmail).single();
+
+      if (data) {
+        currentUser = data;
+        localStorage.setItem('gh_user_session', JSON.stringify(currentUser));
+        showDashboard();
+      } else {
+        alert('Email tidak terdaftar di database Supabase!');
+      }
+    }
+
+    function showDashboard() {
+      document.getElementById('loginScreen').classList.add('hidden');
+      document.getElementById('mainDashboard').classList.remove('hidden');
+      document.getElementById('userDisplayName').innerText = currentUser.nama;
+      document.getElementById('userRoleBadge').innerText = currentUser.role;
+      document.getElementById('expPembayarDisplay').value = `${currentUser.nama} (${currentUser.email})`;
+
+      if (currentUser.role === 'ADMIN') {
+        document.getElementById('tab-admin').classList.remove('hidden');
+      }
+
+      switchTab('catat');
+      fetchAppData();
+    }
+
+    function doLogout() {
+      localStorage.removeItem('gh_user_session');
+      document.getElementById('mainDashboard').classList.add('hidden');
+      document.getElementById('loginScreen').classList.remove('hidden');
+    }
+
+    function switchTab(tabName) {
+      document.querySelectorAll('.tab-btn').forEach(btn => btn.classList.remove('bg-white', 'text-indigo-600', 'shadow-sm', 'font-semibold'));
+      document.querySelectorAll('.page-content').forEach(pg => pg.classList.add('hidden'));
+
+      const activeBtn = document.getElementById('tab-' + tabName);
+      if (activeBtn) activeBtn.classList.add('bg-white', 'text-indigo-600', 'shadow-sm', 'font-semibold');
+      document.getElementById('page-' + tabName).classList.remove('hidden');
+    }
+
+    async function fetchAppData() {
+      const { data: users } = await db.from('users').select('*');
+      const { data: trips } = await db.from('trips').select('*').order('created_at', { ascending: true });
+      
+      const activeTrip = trips && trips.length > 0 ? trips[trips.length - 1] : null;
+      appData.users = users || [];
+      appData.trips = trips || [];
+      appData.activeTripId = activeTrip ? activeTrip.id : null;
+
+      if (activeTrip) {
+        document.getElementById('currentCaseTitle').innerText = activeTrip.judul;
+        document.getElementById('displayCaseName').innerText = activeTrip.judul;
+
+        const { data: expenses } = await db.from('expenses').select('*').eq('trip_id', activeTrip.id);
+        const { data: payments } = await db.from('settlement_payments').select('*').eq('trip_id', activeTrip.id);
+        appData.expenses = expenses || [];
+        appData.payments = payments || [];
+      }
+
+      renderUI();
+    }
+
+    function renderUI() {
+      // Checklist Peserta
+      document.getElementById('expPesertaChecklist').innerHTML = appData.users.map(u => `
+        <label class="flex items-center p-2.5 bg-slate-50 border border-slate-200 rounded-xl cursor-pointer">
+          <input type="checkbox" value="${u.email}" checked class="exp-chk-peserta w-4 h-4 text-indigo-600 rounded">
+          <span class="ml-2 text-xs font-medium text-slate-700 truncate">${u.nama}</span>
+        </label>
+      `).join('');
+
+      // User List Admin
+      document.getElementById('adminUserList').innerHTML = appData.users.map(u => `<p class="text-xs text-slate-600">• ${u.email} (${u.nama} - <strong>${u.role}</strong>)</p>`).join('');
+
+      renderSettlement();
+      renderRiwayat();
+    }
+
+    async function handleExpenseSubmit(e) {
+      e.preventDefault();
+      const selected = Array.from(document.querySelectorAll('.exp-chk-peserta:checked')).map(c => c.value);
+      if (!selected.length) return alert('Pilih minimal 1 peserta!');
+
+      const item = document.getElementById('expNamaItem').value;
+      const nominal = document.getElementById('expNominal').value;
+      const fileInput = document.getElementById('expBuktiFile');
+
+      let buktiUrl = '';
+      if (fileInput.files.length > 0) {
+        const file = fileInput.files[0];
+        const fileName = `${Date.now()}_${file.name}`;
+        const { data } = await db.storage.from('receipts').upload(fileName, file);
+        if (data) {
+          const { data: publicUrlData } = db.storage.from('receipts').getPublicUrl(fileName);
+          buktiUrl = publicUrlData.publicUrl;
+        }
+      }
+
+      await db.from('expenses').insert([{
+        trip_id: appData.activeTripId,
+        nama_item: item,
+        nominal: parseFloat(nominal),
+        pembayar_email: currentUser.email,
+        peserta_emails: selected,
+        bukti_url: buktiUrl
+      }]);
+
+      alert('Sub-expense berhasil dicatat!');
+      document.getElementById('expenseForm').reset();
+      document.getElementById('expPembayarDisplay').value = `${currentUser.nama} (${currentUser.email})`;
+      fetchAppData();
+    }
+
+    async function handleCreateNewTrip() {
+      const judul = document.getElementById('newTripTitle').value.trim();
+      if (!judul) return alert('Masukkan judul trip!');
+
+      await db.from('trips').insert([{ judul: judul, created_by: currentUser.email }]);
+      alert('Trip baru berhasil dibuat!');
+      document.getElementById('newTripTitle').value = '';
+      fetchAppData();
+    }
+
+    function renderSettlement() {
+      const container = document.getElementById('settlementListContainer');
+      if (!appData.expenses.length) return container.innerHTML = `<div class="text-center py-6 text-xs text-slate-400">Belum ada transaksi.</div>`;
+
+      let html = '';
+      appData.expenses.forEach(exp => {
+        const perOrang = exp.nominal / exp.peserta_emails.length;
+        exp.peserta_emails.forEach(pEmail => {
+          if (pEmail.toLowerCase() !== exp.pembayar_email.toLowerCase()) {
+            const pay = appData.payments.find(p => p.expense_id === exp.id && p.dari_email === pEmail);
+            const status = pay ? pay.status : 'BELUM_BAYAR';
+
+            html += `
+              <div class="p-4 bg-white border border-slate-200 rounded-2xl space-y-3">
+                <div class="flex items-center justify-between">
+                  <div>
+                    <p class="text-xs text-slate-400">Item: <strong>${exp.nama_item}</strong></p>
+                    <p class="text-sm font-bold text-slate-800">${pEmail.split('@')[0]} ➔ ${exp.pembayar_email.split('@')[0]} (Pembuat Sub)</p>
+                  </div>
+                  <p class="text-base font-extrabold text-amber-600">Rp ${perOrang.toLocaleString('id-ID')}</p>
+                </div>
+                <div class="pt-2 border-t border-slate-100 flex items-center justify-between text-xs">
+                  <span class="px-2 py-0.5 rounded-full text-[10px] font-bold ${status === 'APPROVED' ? 'bg-emerald-100 text-emerald-700' : 'bg-amber-100 text-amber-800'}">${status}</span>
+                  ${currentUser.email.toLowerCase() === exp.pembayar_email.toLowerCase() && pay && status === 'PENDING_APPROVAL' ? `
+                    <div class="flex gap-1">
+                      <button onclick="approvePay('${pay.id}', 'APPROVED')" class="px-3 py-1 bg-emerald-600 text-white font-bold rounded-lg text-[10px]">Approve</button>
+                    </div>
+                  ` : ''}
+                </div>
+              </div>
+            `;
+          }
+        });
+      });
+      container.innerHTML = html;
+    }
+
+    async function approvePay(payId, status) {
+      await db.from('settlement_payments').update({ status: status }).eq('id', payId);
+      alert('Status pembayaran berhasil diperbarui!');
+      fetchAppData();
+    }
+
+    function renderRiwayat() {
+      document.getElementById('riwayatListContainer').innerHTML = appData.expenses.map(e => `
+        <div class="py-3 flex items-center justify-between">
+          <div>
+            <p class="text-sm font-bold text-slate-800">${e.nama_item}</p>
+            <p class="text-xs text-slate-500">Pembuat: ${e.pembayar_email.split('@')[0]}</p>
+          </div>
+          <p class="text-sm font-extrabold text-slate-900">Rp ${e.nominal.toLocaleString('id-ID')}</p>
+        </div>
+      `).join('');
+    }
+
+    window.onload = function() {
+      const saved = localStorage.getItem('gh_user_session');
+      if (saved) {
+        currentUser = JSON.parse(saved);
+        showDashboard();
+      }
+    };
+  </script>
+</body>
+</html>
