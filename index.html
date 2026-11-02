@@ -8,8 +8,59 @@
   <link href="https://cdn.jsdelivr.net/npm/remixicon@3.5.0/fonts/remixicon.css" rel="stylesheet">
   <!-- Supabase JS SDK -->
   <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
+  <style>
+    .custom-scrollbar::-webkit-scrollbar { height: 6px; width: 6px; }
+    .custom-scrollbar::-webkit-scrollbar-track { background: #f1f5f9; }
+    .custom-scrollbar::-webkit-scrollbar-thumb { background: #cbd5e1; border-radius: 4px; }
+  </style>
 </head>
 <body class="bg-slate-100 text-slate-800 font-sans min-h-screen">
+
+  <!-- CUSTOM TOAST NOTIFICATION -->
+  <div id="toastContainer" class="fixed top-5 right-5 z-[100] space-y-2 pointer-events-none"></div>
+
+  <!-- CUSTOM MODAL DIALOG (REPLACEMENT FOR ALERT / CONFIRM) -->
+  <div id="customModal" class="hidden fixed inset-0 bg-slate-900/60 backdrop-blur-sm z-[90] flex items-center justify-center p-4">
+    <div class="bg-white rounded-3xl p-6 max-w-sm w-full space-y-4 shadow-2xl border border-slate-100 transform transition-all scale-100">
+      <div class="flex items-center gap-3">
+        <div id="customModalIcon" class="w-10 h-10 rounded-2xl bg-indigo-50 text-indigo-600 flex items-center justify-center text-xl shrink-0">
+          <i class="ri-information-line"></i>
+        </div>
+        <h4 id="customModalTitle" class="font-extrabold text-slate-900 text-base">Konfirmasi</h4>
+      </div>
+      <p id="customModalMessage" class="text-xs text-slate-500 leading-relaxed"></p>
+      <div id="customModalActions" class="flex gap-2 justify-end pt-2"></div>
+    </div>
+  </div>
+
+  <!-- MODAL VIEW STRUK / BUKTI BAYAR + DOWNLOAD -->
+  <div id="viewMediaModal" class="hidden fixed inset-0 bg-slate-900/70 backdrop-blur-md z-[80] flex items-center justify-center p-4">
+    <div class="bg-white rounded-3xl p-5 max-w-lg w-full space-y-4 shadow-2xl border border-slate-100 flex flex-col max-h-[90vh]">
+      <div class="flex items-center justify-between border-b pb-3 border-slate-100">
+        <div class="flex items-center gap-2">
+          <i class="ri-file-text-line text-indigo-600 text-xl"></i>
+          <h4 id="mediaModalTitle" class="font-bold text-slate-900 text-sm">Pratinjau Dokumen / Struk</h4>
+        </div>
+        <button onclick="closeMediaModal()" class="w-8 h-8 rounded-full bg-slate-100 hover:bg-slate-200 text-slate-500 flex items-center justify-center transition">
+          <i class="ri-close-line text-lg"></i>
+        </button>
+      </div>
+      
+      <div class="flex-1 overflow-auto bg-slate-50 rounded-2xl border border-slate-200 flex items-center justify-center p-2 min-h-[250px]">
+        <img id="mediaImagePreview" src="" alt="Bukti" class="max-h-[60vh] object-contain rounded-xl hidden">
+        <iframe id="mediaPdfPreview" src="" class="w-full h-[60vh] rounded-xl hidden"></iframe>
+      </div>
+
+      <div class="flex items-center justify-end gap-2 border-t pt-3 border-slate-100">
+        <button onclick="closeMediaModal()" class="px-4 py-2 bg-slate-100 hover:bg-slate-200 text-slate-700 text-xs font-bold rounded-xl transition">
+          Tutup
+        </button>
+        <a id="btnDownloadMedia" href="" download target="_blank" class="px-4 py-2 bg-indigo-600 hover:bg-indigo-700 text-white text-xs font-bold rounded-xl transition shadow-md flex items-center gap-1.5">
+          <i class="ri-download-2-line"></i> Download File
+        </a>
+      </div>
+    </div>
+  </div>
 
   <!-- SCREEN 1: SIGN IN (GOOGLE OAUTH NATIVE) -->
   <div id="loginScreen" class="min-h-screen flex flex-col justify-between items-center p-4">
@@ -169,13 +220,13 @@
         </form>
       </section>
 
-      <!-- PAGE 2: SPLIT & SETTLEMENT (HIRARKI PARENT & CHILD + TOTAL SUMMARY) -->
+      <!-- PAGE 2: SPLIT & SETTLEMENT -->
       <section id="page-split" class="page-content hidden bg-white p-5 rounded-2xl shadow-sm border border-slate-200 space-y-6">
         <div class="border-b pb-3 border-slate-100">
           <h3 class="font-bold text-slate-800 flex items-center gap-2">
             <i class="ri-exchange-dollar-line text-emerald-600"></i> Split Settlement & Approval
           </h3>
-          <p class="text-xs text-slate-500">Ringkasan tagihan per user & rincian per child expense dalam 1 trip</p>
+          <p class="text-xs text-slate-500">Ringkasan tagihan per pasangan user & rincian tabel child sub-expense</p>
         </div>
 
         <div id="settlementListContainer" class="space-y-6"></div>
@@ -295,7 +346,94 @@
     let currentUser = null;
     let appData = { users: [], trips: [], categories: [], activeTrip: null, expenses: [], payments: [] };
 
-    // Helper Fungsi untuk Mencari Nama User Berdasarkan Email
+    // SYSTEM TOAST NOTIFICATION
+    function showToast(message, type = 'info') {
+      const container = document.getElementById('toastContainer');
+      const toast = document.createElement('div');
+      
+      const bgColors = {
+        success: 'bg-emerald-600 text-white',
+        error: 'bg-red-600 text-white',
+        info: 'bg-slate-800 text-white'
+      };
+      
+      const icons = {
+        success: 'ri-checkbox-circle-line',
+        error: 'ri-error-warning-line',
+        info: 'ri-information-line'
+      };
+
+      toast.className = `flex items-center gap-2.5 px-4 py-3 rounded-2xl shadow-xl text-xs font-bold transition-all transform translate-y-2 opacity-0 pointer-events-auto ${bgColors[type] || bgColors.info}`;
+      toast.innerHTML = `<i class="${icons[type] || icons.info} text-base"></i> <span>${message}</span>`;
+      
+      container.appendChild(toast);
+
+      setTimeout(() => {
+        toast.classList.remove('translate-y-2', 'opacity-0');
+      }, 50);
+
+      setTimeout(() => {
+        toast.classList.add('opacity-0', 'translate-y-2');
+        setTimeout(() => toast.remove(), 300);
+      }, 3500);
+    }
+
+    // CUSTOM MODAL DIALOG (REPLACES ALERT / CONFIRM)
+    function showConfirmModal(title, message, onConfirm) {
+      const modal = document.getElementById('customModal');
+      document.getElementById('customModalTitle').innerText = title;
+      document.getElementById('customModalMessage').innerText = message;
+      
+      const actions = document.getElementById('customModalActions');
+      actions.innerHTML = `
+        <button onclick="closeCustomModal()" class="px-4 py-2 bg-slate-100 hover:bg-slate-200 text-slate-700 text-xs font-bold rounded-xl transition">Batal</button>
+        <button id="btnModalConfirm" class="px-4 py-2 bg-indigo-600 hover:bg-indigo-700 text-white text-xs font-bold rounded-xl transition shadow-md">Ya, Lanjutkan</button>
+      `;
+
+      document.getElementById('btnModalConfirm').onclick = () => {
+        closeCustomModal();
+        if (onConfirm) onConfirm();
+      };
+
+      modal.classList.remove('hidden');
+    }
+
+    function closeCustomModal() {
+      document.getElementById('customModal').classList.add('hidden');
+    }
+
+    // MEDIA PREVIEW MODAL
+    function openMediaModal(url, title = 'Struk / Bukti') {
+      if (!url) return showToast('File belum diunggah!', 'error');
+
+      const modal = document.getElementById('viewMediaModal');
+      document.getElementById('mediaModalTitle').innerText = title;
+
+      const img = document.getElementById('mediaImagePreview');
+      const pdf = document.getElementById('mediaPdfPreview');
+      const btnDl = document.getElementById('btnDownloadMedia');
+
+      btnDl.href = url;
+
+      if (url.toLowerCase().endsWith('.pdf')) {
+        img.classList.add('hidden');
+        pdf.classList.remove('hidden');
+        pdf.src = url;
+      } else {
+        pdf.classList.add('hidden');
+        img.classList.remove('hidden');
+        img.src = url;
+      }
+
+      modal.classList.remove('hidden');
+    }
+
+    function closeMediaModal() {
+      document.getElementById('viewMediaModal').classList.add('hidden');
+      document.getElementById('mediaImagePreview').src = '';
+      document.getElementById('mediaPdfPreview').src = '';
+    }
+
     function getUserNameByEmail(email) {
       if (!email) return 'User';
       const u = appData.users.find(usr => usr.email.toLowerCase() === email.toLowerCase());
@@ -328,7 +466,7 @@
         provider: 'google',
         options: { redirectTo: redirectUri }
       });
-      if (error) alert('Gagal login via Google: ' + error.message);
+      if (error) showToast('Gagal login via Google: ' + error.message, 'error');
     }
 
     async function processAuthUser(authUser) {
@@ -416,7 +554,6 @@
       document.getElementById('displayTotalEventNominal').innerText = formattedTotal;
       document.getElementById('riwayatTotalNominal').innerText = formattedTotal;
 
-      // 1. Dropdown Trip pada Form Expense
       const expTripSelect = document.getElementById('expTripSelect');
       if (appData.trips.length > 0) {
         expTripSelect.innerHTML = appData.trips.map(t => `
@@ -426,13 +563,11 @@
         expTripSelect.innerHTML = `<option value="">-- Belum Ada Trip (Buat di Admin Setup) --</option>`;
       }
 
-      // 2. Dropdown Kategori
       const expKategoriSelect = document.getElementById('expKategoriSelect');
       expKategoriSelect.innerHTML = appData.categories.map(c => `
         <option value="${c.nama}">${c.nama}</option>
       `).join('');
 
-      // 3. Dropdown Pembayar di Awal
       const pembayarSelect = document.getElementById('expPembayarSelect');
       pembayarSelect.innerHTML = appData.users.map(u => `
         <option value="${u.email}" ${u.email === currentUser.email ? 'selected' : ''}>${u.nama} (${u.email})</option>
@@ -440,7 +575,6 @@
 
       onSelectTripForExpenseChange();
 
-      // 4. Fitur khusus Admin Setup
       if (currentUser.role === 'ADMIN') {
         document.getElementById('adminTripList').innerHTML = appData.trips.length > 0 
           ? appData.trips.map(t => `
@@ -512,7 +646,7 @@
       `).join('');
     }
 
-    // RENDER TERSTRUKTUR PARENT (TRIP) & CHILD (EXPENSES) + TOTAL SUMMARY
+    // RENDER TERSTRUKTUR PARENT (TRIP) & CHILD (TABEL EXPENSES)
     function renderStructuredSettlement() {
       const container = document.getElementById('settlementListContainer');
       if (!appData.trips.length) return container.innerHTML = `<div class="text-center py-6 text-xs text-slate-400">Belum ada trip yang dibuat.</div>`;
@@ -522,8 +656,6 @@
       appData.trips.forEach(trip => {
         const tripExpenses = appData.expenses.filter(e => e.trip_id === trip.id);
         
-        // Buat Pemetaan Total Tagihan Per Pasang User (Summary Settlement)
-        // Format Key: "emailPengutang->emailPembayarAwal"
         let summaryMap = {};
 
         tripExpenses.forEach(exp => {
@@ -547,7 +679,7 @@
 
         // BARIS PARENT (JUDUL TRIP)
         mainHtml += `
-          <div class="border border-indigo-200 bg-white rounded-3xl p-5 shadow-sm space-y-4">
+          <div class="border border-indigo-200 bg-white rounded-3xl p-5 shadow-sm space-y-5">
             <div class="flex items-center justify-between border-b pb-3 border-indigo-50">
               <div class="flex items-center space-x-2">
                 <span class="p-2 bg-indigo-100 text-indigo-700 rounded-xl font-bold text-xs"><i class="ri-map-pin-2-line"></i> TRIP PARENT</span>
@@ -562,11 +694,11 @@
           return;
         }
 
-        // SECTION 1: RINGKASAN TOTAL TAGIHAN ANTAR USER (SUMMARY PER PAIR)
+        // SECTION 1: RINGKASAN TOTAL TAGIHAN (SUMMARY CARD PER PAIR)
         mainHtml += `
           <div class="space-y-3">
             <h5 class="text-xs font-extrabold text-slate-700 uppercase tracking-wider flex items-center gap-1.5">
-              <i class="ri-pie-chart-2-line text-indigo-600"></i> Ringkasan Total Tagihan & Pelunasan Sekaligus
+              <i class="ri-pie-chart-2-line text-indigo-600"></i> Ringkasan Total Settlement Antar User
             </h5>
             <div class="grid grid-cols-1 md:grid-cols-2 gap-3">
         `;
@@ -575,40 +707,60 @@
           const dariNama = getUserNameByEmail(summary.dariEmail);
           const keNama = getUserNameByEmail(summary.keEmail);
 
-          // Cek apakah semua child expense dalam summary ini sudah lunas
           let allApproved = true;
           let anyPending = false;
+          let summaryBuktiUrl = '';
 
           summary.childExpenses.forEach(item => {
             const pay = appData.payments.find(p => p.expense_id === item.exp.id && p.dari_email.toLowerCase() === summary.dariEmail.toLowerCase());
             if (!pay || pay.status !== 'APPROVED') allApproved = false;
             if (pay && pay.status === 'PENDING_APPROVAL') anyPending = true;
+            if (pay && pay.bukti_url) summaryBuktiUrl = pay.bukti_url;
           });
 
+          const isUserYangBayarAwal = currentUser.email.toLowerCase() === summary.keEmail.toLowerCase();
+          const isUserPengutang = currentUser.email.toLowerCase() === summary.dariEmail.toLowerCase();
+
           mainHtml += `
-            <div class="p-4 bg-gradient-to-br from-indigo-50/60 to-slate-50 border border-indigo-100 rounded-2xl space-y-2">
+            <div class="p-4 bg-gradient-to-br from-indigo-50/70 to-slate-50 border border-indigo-100 rounded-2xl space-y-3">
               <div class="flex items-center justify-between">
                 <div>
                   <p class="text-xs font-bold text-slate-800">${dariNama} <span class="text-indigo-600 font-semibold">➔ Bayar ke</span> ${keNama}</p>
-                  <p class="text-[11px] text-slate-400">Total akumulasi dari ${summary.childExpenses.length} item</p>
+                  <p class="text-[11px] text-slate-400">Total ${summary.childExpenses.length} transaksi</p>
                 </div>
                 <p class="text-base font-extrabold text-indigo-700">Rp ${summary.totalNominal.toLocaleString('id-ID')}</p>
               </div>
 
-              <div class="pt-2 border-t border-indigo-100/60 flex items-center justify-between text-xs">
+              <div class="pt-2 border-t border-indigo-100 flex flex-wrap items-center justify-between gap-2 text-xs">
                 <div>
-                  <span class="px-2 py-0.5 rounded-full text-[10px] font-bold ${
-                    allApproved ? 'bg-emerald-100 text-emerald-700' :
-                    anyPending ? 'bg-amber-100 text-amber-800' : 'bg-red-100 text-red-600'
-                  }">${allApproved ? 'LUNAS (ALL APPROVED)' : anyPending ? 'PENDING APPROVAL' : 'BELUM LUNAS'}</span>
+                  <span class="px-2.5 py-1 rounded-full text-[10px] font-bold ${
+                    allApproved ? 'bg-emerald-100 text-emerald-700 border border-emerald-200' :
+                    anyPending ? 'bg-amber-100 text-amber-800 border border-amber-200' : 'bg-red-100 text-red-600 border border-red-200'
+                  }">${allApproved ? 'COMPLETE / APPROVED' : anyPending ? 'PROSES APPROVAL' : 'BELUM DIBAYAR'}</span>
+                  
+                  ${summaryBuktiUrl ? `
+                    <button onclick="openMediaModal('${summaryBuktiUrl}', 'Bukti Total Transfer: ${dariNama}')" class="ml-1 text-[10px] font-bold text-indigo-600 underline">
+                      <i class="ri-file-search-line"></i> Lihat Bukti
+                    </button>
+                  ` : ''}
                 </div>
 
-                <!-- PELUNASAN / APPROVAL TOTAL SEKALIGUS -->
-                ${(currentUser.role === 'ADMIN' || currentUser.email.toLowerCase() === summary.keEmail.toLowerCase()) && !allApproved ? `
-                  <button onclick="approveBulkSettlement('${trip.id}', '${summary.dariEmail}', '${summary.keEmail}')" class="px-3 py-1 bg-emerald-600 hover:bg-emerald-700 text-white font-bold text-[10px] rounded-lg shadow-sm">
-                    Approve Total Sekaligus
-                  </button>
-                ` : ''}
+                <div class="flex items-center gap-1.5">
+                  <!-- UPLOAD BUKTI TOTAL -->
+                  ${(isUserPengutang || currentUser.role === 'ADMIN') && !allApproved ? `
+                    <label class="cursor-pointer px-2.5 py-1 bg-white border border-indigo-300 hover:bg-indigo-50 text-indigo-700 text-[10px] font-bold rounded-lg shadow-sm flex items-center gap-1">
+                      <i class="ri-upload-2-line"></i> Upload Bukti
+                      <input type="file" accept="image/*,application/pdf" class="hidden" onchange="handleUploadBulkProof(event, '${trip.id}', '${summary.dariEmail}', '${summary.keEmail}', ${summary.totalNominal})">
+                    </label>
+                  ` : ''}
+
+                  <!-- APPROVAL TOTAL OLEH ADMIN / USER PEMBAYAR AWAL -->
+                  ${(currentUser.role === 'ADMIN' || isUserYangBayarAwal) && !allApproved ? `
+                    <button onclick="approveBulkSettlement('${trip.id}', '${summary.dariEmail}', '${summary.keEmail}')" class="px-3 py-1 bg-emerald-600 hover:bg-emerald-700 text-white font-bold text-[10px] rounded-lg shadow-sm">
+                      Approve Total
+                    </button>
+                  ` : ''}
+                </div>
               </div>
             </div>
           `;
@@ -616,109 +768,168 @@
 
         mainHtml += `</div></div>`; // End Summary Grid
 
-        // SECTION 2: RINCIAN CHILD EXPENSE
+        // SECTION 2: RINCIAN CHILD EXPENSES DALAM BENTUK TABEL RAPI
         mainHtml += `
           <div class="space-y-3 pt-2">
             <h5 class="text-xs font-extrabold text-slate-700 uppercase tracking-wider flex items-center gap-1.5">
-              <i class="ri-list-check-2 text-indigo-600"></i> Rincian Child Sub-Expenses
+              <i class="ri-table-line text-indigo-600"></i> Tabel Rincian Child Expenses
             </h5>
-            <div class="space-y-2">
+            
+            <div class="overflow-x-auto border border-slate-200 rounded-2xl custom-scrollbar">
+              <table class="w-full text-left text-xs">
+                <thead class="bg-slate-50 text-slate-500 uppercase font-bold text-[10px] border-b border-slate-200">
+                  <tr>
+                    <th class="p-3">Kategori & Item</th>
+                    <th class="p-3">Pembayar Awal</th>
+                    <th class="p-3">Peserta & Tagihan</th>
+                    <th class="p-3 text-center">Status</th>
+                    <th class="p-3 text-center">Struk / Bukti</th>
+                    <th class="p-3 text-right">Aksi</th>
+                  </tr>
+                </thead>
+                <tbody class="divide-y divide-slate-100 bg-white">
         `;
 
         tripExpenses.forEach(exp => {
           const perOrang = exp.nominal / (exp.peserta_emails.length || 1);
           const pembayarNama = getUserNameByEmail(exp.pembayar_email);
 
-          mainHtml += `
-            <div class="p-3.5 bg-slate-50 border border-slate-200 rounded-2xl space-y-2">
-              <div class="flex items-center justify-between">
-                <div>
-                  <span class="text-[9px] font-bold text-indigo-600 bg-white border border-indigo-200 px-2 py-0.5 rounded-md">${exp.kategori || 'Umum'}</span>
-                  <span class="text-xs font-bold text-slate-800 ml-1">${exp.nama_item}</span>
-                  <p class="text-[11px] text-slate-500">Dibayar di awal oleh: <strong>${pembayarNama}</strong> (Total Rp ${exp.nominal.toLocaleString('id-ID')})</p>
-                </div>
-                ${exp.bukti_url ? `<a href="${exp.bukti_url}" target="_blank" class="text-xs font-bold text-indigo-600 underline"><i class="ri-file-search-line"></i> Struk</a>` : ''}
-              </div>
-
-              <!-- LIST PESERTA YANG TERLIBAT DALAM CHILD EXPENSE INI -->
-              <div class="grid grid-cols-1 sm:grid-cols-2 gap-2 pt-1 border-t border-slate-200/60 text-xs">
-          `;
-
           exp.peserta_emails.forEach(pEmail => {
             const pNama = getUserNameByEmail(pEmail);
             const isPembayarAwal = pEmail.toLowerCase() === exp.pembayar_email.toLowerCase();
 
-            if (isPembayarAwal) {
-              mainHtml += `
-                <div class="flex items-center justify-between p-2 bg-emerald-50/50 rounded-xl border border-emerald-100">
-                  <span class="text-slate-700 font-medium">${pNama}</span>
-                  <span class="text-[10px] font-bold text-emerald-700 bg-emerald-100 px-2 py-0.5 rounded-md">Pembayar Awal</span>
-                </div>
-              `;
-            } else {
+            if (!isPembayarAwal) {
               const pay = appData.payments.find(p => p.expense_id === exp.id && p.dari_email.toLowerCase() === pEmail.toLowerCase());
               const status = pay ? pay.status : 'BELUM_BAYAR';
+              const isUserYangBayarAwal = currentUser.email.toLowerCase() === exp.pembayar_email.toLowerCase();
+              const isUserPengutang = currentUser.email.toLowerCase() === pEmail.toLowerCase();
 
               mainHtml += `
-                <div class="flex flex-col p-2 bg-white rounded-xl border border-slate-200 space-y-1">
-                  <div class="flex items-center justify-between">
-                    <span class="font-bold text-slate-800">${pNama} <span class="text-slate-400 font-normal">➔ ${pembayarNama}</span></span>
-                    <span class="font-bold text-amber-600">Rp ${perOrang.toLocaleString('id-ID')}</span>
-                  </div>
+                <tr class="hover:bg-slate-50/80 transition">
+                  <td class="p-3">
+                    <span class="text-[9px] font-bold text-indigo-600 bg-indigo-50 border border-indigo-100 px-2 py-0.5 rounded-md inline-block mb-0.5">${exp.kategori || 'Umum'}</span>
+                    <p class="font-bold text-slate-800">${exp.nama_item}</p>
+                  </td>
+                  <td class="p-3 font-medium text-slate-700">${pembayarNama}</td>
+                  <td class="p-3">
+                    <p class="font-bold text-slate-800">${pNama}</p>
+                    <p class="text-[10px] font-bold text-amber-600">Rp ${perOrang.toLocaleString('id-ID')}</p>
+                  </td>
+                  <td class="p-3 text-center">
+                    <span class="px-2 py-0.5 rounded-full text-[9px] font-bold ${
+                      status === 'APPROVED' ? 'bg-emerald-100 text-emerald-700' :
+                      status === 'PENDING_APPROVAL' ? 'bg-amber-100 text-amber-800' : 'bg-red-100 text-red-600'
+                    }">${status === 'APPROVED' ? 'APPROVED' : status === 'PENDING_APPROVAL' ? 'PENDING' : 'BELUM BAYAR'}</span>
+                  </td>
+                  <td class="p-3 text-center">
+                    <div class="flex items-center justify-center gap-1">
+                      ${exp.bukti_url ? `
+                        <button onclick="openMediaModal('${exp.bukti_url}', 'Struk: ${exp.nama_item}')" class="p-1.5 bg-slate-100 hover:bg-slate-200 text-indigo-600 rounded-lg font-bold text-[10px]" title="Lihat Struk">
+                          <i class="ri-receipt-line"></i> Struk
+                        </button>
+                      ` : '<span class="text-[10px] text-slate-300">-</span>'}
 
-                  <div class="flex items-center justify-between text-[10px] pt-1">
-                    <div>
-                      <span class="px-2 py-0.5 rounded-full font-bold ${
-                        status === 'APPROVED' ? 'bg-emerald-100 text-emerald-700' :
-                        status === 'PENDING_APPROVAL' ? 'bg-amber-100 text-amber-800' : 'bg-red-100 text-red-600'
-                      }">${status}</span>
-                      ${pay && pay.bukti_url ? `<a href="${pay.bukti_url}" target="_blank" class="ml-1 text-indigo-600 font-bold underline">Bukti TF</a>` : ''}
+                      ${pay && pay.bukti_url ? `
+                        <button onclick="openMediaModal('${pay.bukti_url}', 'Bukti TF: ${pNama}')" class="p-1.5 bg-emerald-50 hover:bg-emerald-100 text-emerald-700 rounded-lg font-bold text-[10px]" title="Lihat Bukti Transfer">
+                          <i class="ri-file-check-line"></i> Bukti TF
+                        </button>
+                      ` : ''}
                     </div>
+                  </td>
+                  <td class="p-3 text-right">
+                    <div class="flex items-center justify-end gap-1">
+                      <!-- UPLOAD CHILD -->
+                      ${(isUserPengutang || currentUser.role === 'ADMIN') && status !== 'APPROVED' ? `
+                        <label class="cursor-pointer px-2 py-1 bg-indigo-50 hover:bg-indigo-100 text-indigo-700 font-bold text-[10px] rounded-lg">
+                          Upload
+                          <input type="file" accept="image/*,application/pdf" class="hidden" onchange="handleUploadChildProof(event, '${exp.id}', '${exp.pembayar_email}', '${pEmail}', ${perOrang})">
+                        </label>
+                      ` : ''}
 
-                    <!-- UPLOAD BUKTI TRANSFER UNTUK USER YANG LOGIN ATAU ADMIN -->
-                    ${(pEmail.toLowerCase() === currentUser.email.toLowerCase() || currentUser.role === 'ADMIN') && status !== 'APPROVED' ? `
-                      <div class="flex items-center gap-1">
-                        <input type="file" id="uploadPay_${exp.id}_${pEmail.replace(/[@.]/g, '_')}" accept="image/*,application/pdf" class="text-[9px] w-28">
-                        <button onclick="handleUploadPaymentProofChild('${exp.id}', '${exp.pembayar_email}', '${pEmail}', ${perOrang})" class="px-2 py-0.5 bg-indigo-600 text-white font-bold rounded">Upload</button>
-                      </div>
-                    ` : ''}
-
-                    <!-- APPROVAL PER CHILD OLEH ADMIN / PEMBAYAR AWAL -->
-                    ${(currentUser.role === 'ADMIN' || currentUser.email.toLowerCase() === exp.pembayar_email.toLowerCase()) && pay && status === 'PENDING_APPROVAL' ? `
-                      <div class="flex gap-1">
-                        <button onclick="approvePay('${pay.id}', 'APPROVED')" class="px-2 py-0.5 bg-emerald-600 text-white font-bold rounded">Approve</button>
-                      </div>
-                    ` : ''}
-                  </div>
-                </div>
+                      <!-- APPROVE CHILD -->
+                      ${(currentUser.role === 'ADMIN' || isUserYangBayarAwal) && pay && status === 'PENDING_APPROVAL' ? `
+                        <button onclick="approvePay('${pay.id}', 'APPROVED')" class="px-2 py-1 bg-emerald-600 hover:bg-emerald-700 text-white font-bold text-[10px] rounded-lg shadow-sm">
+                          Approve
+                        </button>
+                      ` : ''}
+                    </div>
+                  </td>
+                </tr>
               `;
             }
           });
-
-          mainHtml += `</div></div>`; // End Child Card
         });
 
-        mainHtml += `</div></div></div>`; // End Parent Card
+        mainHtml += `
+                </tbody>
+              </table>
+            </div>
+          </div>
+        `;
+
+        mainHtml += `</div>`; // End Parent Container
       });
 
       container.innerHTML = mainHtml;
     }
 
-    // UPLOAD BUKTI PAY PER CHILD ITEM
-    async function handleUploadPaymentProofChild(expId, keEmail, dariEmail, nominal) {
-      const inputId = `uploadPay_${expId}_${dariEmail.replace(/[@.]/g, '_')}`;
-      const fileInput = document.getElementById(inputId);
-      if (!fileInput.files || !fileInput.files.length) return alert('Pilih foto/file PDF bukti pembayaran!');
+    // UPLOAD BUKTI TOTAL SETTLEMENT (BULK)
+    async function handleUploadBulkProof(event, tripId, dariEmail, keEmail, totalNominal) {
+      const file = event.target.files[0];
+      if (!file) return;
 
-      const file = fileInput.files[0];
-      const fileName = `settlement_${Date.now()}_${file.name}`;
+      const fileName = `bulk_settlement_${Date.now()}_${file.name}`;
+      showToast('Mengunggah bukti pembayaran...', 'info');
+
+      const { data, error: uploadErr } = await db.storage.from('receipts').upload(fileName, file);
+      if (uploadErr) return showToast('Gagal upload: ' + uploadErr.message, 'error');
+
+      const { data: pubData } = db.storage.from('receipts').getPublicUrl(fileName);
+      const buktiUrl = pubData.publicUrl;
+
+      const tripExpenses = appData.expenses.filter(e => e.trip_id === tripId);
       
-      const { data } = await db.storage.from('receipts').upload(fileName, file);
-      if (!data) return alert('Gagal mengunggah file bukti!');
+      for (let exp of tripExpenses) {
+        if (exp.peserta_emails.includes(dariEmail) && exp.pembayar_email.toLowerCase() === keEmail.toLowerCase()) {
+          const perOrang = exp.nominal / (exp.peserta_emails.length || 1);
+          const pay = appData.payments.find(p => p.expense_id === exp.id && p.dari_email.toLowerCase() === dariEmail.toLowerCase());
+
+          if (pay) {
+            await db.from('settlement_payments').update({
+              bukti_url: buktiUrl,
+              status: 'PENDING_APPROVAL'
+            }).eq('id', pay.id);
+          } else {
+            await db.from('settlement_payments').insert([{
+              trip_id: tripId,
+              expense_id: exp.id,
+              dari_email: dariEmail,
+              ke_email: keEmail,
+              nominal: perOrang,
+              bukti_url: buktiUrl,
+              status: 'PENDING_APPROVAL'
+            }]);
+          }
+        }
+      }
+
+      showToast('Bukti transfer berhasil diunggah! Menunggu approval.', 'success');
+      fetchAppData();
+    }
+
+    // UPLOAD BUKTI CHILD ITEM
+    async function handleUploadChildProof(event, expId, keEmail, dariEmail, nominal) {
+      const file = event.target.files[0];
+      if (!file) return;
+
+      const fileName = `settlement_${Date.now()}_${file.name}`;
+      showToast('Mengunggah bukti pembayaran...', 'info');
+
+      const { data, error: uploadErr } = await db.storage.from('receipts').upload(fileName, file);
+      if (uploadErr) return showToast('Gagal upload: ' + uploadErr.message, 'error');
 
       const { data: pubData } = db.storage.from('receipts').getPublicUrl(fileName);
 
-      // Cek apakah payment sudah ada
       const existing = appData.payments.find(p => p.expense_id === expId && p.dari_email.toLowerCase() === dariEmail.toLowerCase());
 
       if (existing) {
@@ -738,65 +949,77 @@
         }]);
       }
 
-      alert('Bukti transfer berhasil diupload! Menunggu approval.');
+      showToast('Bukti transfer berhasil diunggah! Menunggu approval.', 'success');
       fetchAppData();
     }
 
-    // APPROVE BULK/TOTAL SETTLEMENT (APPROVE SEKALIGUS SELURUH CHILD EXPENSE PASANGAN USER)
-    async function approveBulkSettlement(tripId, dariEmail, keEmail) {
-      if (!confirm(`Approve seluruh pelunasan dari ${getUserNameByEmail(dariEmail)} ke ${getUserNameByEmail(keEmail)}?`)) return;
+    // APPROVE BULK/TOTAL SETTLEMENT
+    function approveBulkSettlement(tripId, dariEmail, keEmail) {
+      const dariNama = getUserNameByEmail(dariEmail);
+      const keNama = getUserNameByEmail(keEmail);
 
-      const tripExpenses = appData.expenses.filter(e => e.trip_id === tripId);
-      
-      for (let exp of tripExpenses) {
-        if (exp.peserta_emails.includes(dariEmail) && exp.pembayar_email.toLowerCase() === keEmail.toLowerCase()) {
-          const perOrang = exp.nominal / (exp.peserta_emails.length || 1);
-          const pay = appData.payments.find(p => p.expense_id === exp.id && p.dari_email.toLowerCase() === dariEmail.toLowerCase());
+      showConfirmModal(
+        'Konfirmasi Pelunasan Total',
+        `Apakah Anda yakin ingin menyetujui (Approve) seluruh pelunasan tagihan dari ${dariNama} ke ${keNama}?`,
+        async () => {
+          const tripExpenses = appData.expenses.filter(e => e.trip_id === tripId);
+          
+          for (let exp of tripExpenses) {
+            if (exp.peserta_emails.includes(dariEmail) && exp.pembayar_email.toLowerCase() === keEmail.toLowerCase()) {
+              const perOrang = exp.nominal / (exp.peserta_emails.length || 1);
+              const pay = appData.payments.find(p => p.expense_id === exp.id && p.dari_email.toLowerCase() === dariEmail.toLowerCase());
 
-          if (pay) {
-            await db.from('settlement_payments').update({ status: 'APPROVED' }).eq('id', pay.id);
-          } else {
-            await db.from('settlement_payments').insert([{
-              trip_id: tripId,
-              expense_id: exp.id,
-              dari_email: dariEmail,
-              ke_email: keEmail,
-              nominal: perOrang,
-              bukti_url: '',
-              status: 'APPROVED'
-            }]);
+              if (pay) {
+                await db.from('settlement_payments').update({ status: 'APPROVED' }).eq('id', pay.id);
+              } else {
+                await db.from('settlement_payments').insert([{
+                  trip_id: tripId,
+                  expense_id: exp.id,
+                  dari_email: dariEmail,
+                  ke_email: keEmail,
+                  nominal: perOrang,
+                  bukti_url: '',
+                  status: 'APPROVED'
+                }]);
+              }
+            }
           }
-        }
-      }
 
-      alert('Seluruh tagihan untuk pasangan user tersebut berhasil di-approve!');
-      fetchAppData();
+          showToast('Seluruh tagihan berhasil disetujui (APPROVED)!', 'success');
+          fetchAppData();
+        }
+      );
     }
 
     async function approvePay(payId, status) {
       await db.from('settlement_payments').update({ status: status }).eq('id', payId);
-      alert(`Status pembayaran berhasil diubah menjadi: ${status}`);
+      showToast(`Status pembayaran diubah menjadi ${status}!`, 'success');
       fetchAppData();
     }
 
-    // HANDLER PENCATATAN EXPENSE & ADMIN SETUP
+    // HANDLER ADMIN SETUP & SUB-EXPENSE SUBMIT
     async function handleCreateNewTrip() {
       const judul = document.getElementById('newTripTitle').value.trim();
-      if (!judul) return alert('Masukkan judul trip!');
+      if (!judul) return showToast('Masukkan judul trip!', 'error');
 
       const { error } = await db.from('trips').insert([{ judul: judul, created_by: currentUser.email }]);
-      if (error) return alert('Gagal membuat Trip: ' + error.message);
+      if (error) return showToast('Gagal membuat Trip: ' + error.message, 'error');
 
-      alert('Trip baru berhasil dibuat!');
+      showToast('Trip baru berhasil dibuat!', 'success');
       document.getElementById('newTripTitle').value = '';
       fetchAppData();
     }
 
-    async function handleDeleteTrip(tripId) {
-      if (confirm('Hapus trip ini beserta catatannya?')) {
-        await db.from('trips').delete().eq('id', tripId);
-        fetchAppData();
-      }
+    function handleDeleteTrip(tripId) {
+      showConfirmModal(
+        'Hapus Trip',
+        'Apakah Anda yakin ingin menghapus trip ini beserta seluruh catatannya?',
+        async () => {
+          await db.from('trips').delete().eq('id', tripId);
+          showToast('Trip berhasil dihapus.', 'info');
+          fetchAppData();
+        }
+      );
     }
 
     async function handleAdminAddUser() {
@@ -804,62 +1027,72 @@
       const email = document.getElementById('adminNewUserEmail').value.trim();
       const role = document.getElementById('adminNewUserRole').value;
 
-      if (!nama || !email) return alert('Lengkapi nama dan email user!');
+      if (!nama || !email) return showToast('Lengkapi nama dan email user!', 'error');
 
       const { error } = await db.from('users').insert([{ nama: nama, email: email, role: role }]);
-      if (error) return alert('Gagal menambah user: ' + error.message);
+      if (error) return showToast('Gagal menambah user: ' + error.message, 'error');
 
-      alert('User baru berhasil ditambahkan!');
+      showToast('User baru berhasil ditambahkan!', 'success');
       document.getElementById('adminNewUserName').value = '';
       document.getElementById('adminNewUserEmail').value = '';
       fetchAppData();
     }
 
-    async function handleDeleteUser(userId) {
-      if (confirm('Hapus user ini dari sistem?')) {
-        await db.from('users').delete().eq('id', userId);
-        fetchAppData();
-      }
+    function handleDeleteUser(userId) {
+      showConfirmModal(
+        'Hapus User',
+        'Apakah Anda yakin ingin menghapus user ini dari sistem?',
+        async () => {
+          await db.from('users').delete().eq('id', userId);
+          showToast('User berhasil dihapus.', 'info');
+          fetchAppData();
+        }
+      );
     }
 
     async function handleCreateNewCategory() {
       const nama = document.getElementById('newCategoryName').value.trim();
-      if (!nama) return alert('Masukkan nama kategori!');
+      if (!nama) return showToast('Masukkan nama kategori!', 'error');
 
       const { error } = await db.from('categories').insert([{ nama: nama }]);
-      if (error) return alert('Gagal menambah kategori: ' + error.message);
+      if (error) return showToast('Gagal menambah kategori: ' + error.message, 'error');
 
-      alert('Kategori baru berhasil ditambahkan!');
+      showToast('Kategori baru berhasil ditambahkan!', 'success');
       document.getElementById('newCategoryName').value = '';
       fetchAppData();
     }
 
-    async function handleDeleteCategory(catId) {
-      if (confirm('Hapus kategori ini?')) {
-        await db.from('categories').delete().eq('id', catId);
-        fetchAppData();
-      }
+    function handleDeleteCategory(catId) {
+      showConfirmModal(
+        'Hapus Kategori',
+        'Hapus kategori expense ini?',
+        async () => {
+          await db.from('categories').delete().eq('id', catId);
+          showToast('Kategori dihapus.', 'info');
+          fetchAppData();
+        }
+      );
     }
 
     async function saveTripParticipants() {
       const selectedTripId = document.getElementById('adminTripSelectForAssign').value;
-      if (!selectedTripId) return alert('Pilih trip terlebih dahulu!');
+      if (!selectedTripId) return showToast('Pilih trip terlebih dahulu!', 'error');
       
       const selectedEmails = Array.from(document.querySelectorAll('.admin-trip-user-chk:checked')).map(c => c.value);
       const { error } = await db.from('trips').update({ active_participant_emails: selectedEmails }).eq('id', selectedTripId);
-      if (error) return alert('Gagal menyimpan peserta trip: ' + error.message);
+      if (error) return showToast('Gagal menyimpan peserta trip: ' + error.message, 'error');
 
-      alert('Daftar peserta trip berhasil diperbarui!');
+      showToast('Daftar peserta trip berhasil diperbarui!', 'success');
       fetchAppData();
     }
 
     async function handleExpenseSubmit(e) {
       e.preventDefault();
       const selectedPeserta = Array.from(document.querySelectorAll('.exp-chk-peserta:checked')).map(c => c.value);
-      if (!selectedPeserta.length) return alert('Pilih minimal 1 peserta!');
+      if (!selectedPeserta.length) return showToast('Pilih minimal 1 peserta!', 'error');
 
       const tripId = document.getElementById('expTripSelect').value;
-      if (!tripId) return alert('Pilih trip terlebih dahulu!');
+      if (!tripId) return showToast('Pilih trip terlebih dahulu!', 'error');
 
       const kategori = document.getElementById('expKategoriSelect').value;
       const item = document.getElementById('expNamaItem').value;
@@ -869,6 +1102,7 @@
 
       let buktiUrl = '';
       if (fileInput.files.length > 0) {
+        showToast('Mengunggah struk pengeluaran...', 'info');
         const file = fileInput.files[0];
         const fileName = `${Date.now()}_${file.name}`;
         const { data } = await db.storage.from('receipts').upload(fileName, file);
@@ -888,9 +1122,9 @@
         bukti_url: buktiUrl
       }]);
 
-      if (error) return alert('Gagal mencatat sub-expense: ' + error.message);
+      if (error) return showToast('Gagal mencatat sub-expense: ' + error.message, 'error');
 
-      alert('Sub-Expense berhasil dicatat!');
+      showToast('Sub-Expense berhasil dicatat!', 'success');
       document.getElementById('expenseForm').reset();
       fetchAppData();
     }
@@ -907,7 +1141,14 @@
             <p class="text-sm font-bold text-slate-800 mt-0.5">${e.nama_item}</p>
             <p class="text-xs text-slate-500">Dibayar oleh: <strong>${getUserNameByEmail(e.pembayar_email)}</strong> • ${e.peserta_emails.length} Peserta</p>
           </div>
-          <p class="text-sm font-extrabold text-slate-900">Rp ${parseFloat(e.nominal).toLocaleString('id-ID')}</p>
+          <div class="flex items-center gap-3">
+            <p class="text-sm font-extrabold text-slate-900">Rp ${parseFloat(e.nominal).toLocaleString('id-ID')}</p>
+            ${e.bukti_url ? `
+              <button onclick="openMediaModal('${e.bukti_url}', 'Struk: ${e.nama_item}')" class="p-2 bg-indigo-50 text-indigo-600 hover:bg-indigo-100 rounded-xl text-xs font-bold" title="Lihat Struk">
+                <i class="ri-receipt-line"></i>
+              </button>
+            ` : ''}
+          </div>
         </div>
       `).join('');
     }
