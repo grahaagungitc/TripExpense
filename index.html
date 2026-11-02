@@ -261,7 +261,14 @@
   <script>
     const SUPABASE_URL = 'https://htmmlzaxnbedweezhlyb.supabase.co';
     const SUPABASE_KEY = 'sb_publishable_m2YTY0J9VqIBtl5sAEYhgA_YPL0o...'; // Kunci Publishable Supabase Anda
-    const db = supabase.createClient(SUPABASE_URL, SUPABASE_KEY);
+    const db = supabase.createClient(SUPABASE_URL, SUPABASE_KEY, {
+    auth: {
+    flowType: 'pkce',
+    autoRefreshToken: true,
+    persistSession: true,
+    detectSessionInUrl: true
+    }
+    });
 
     let currentUser = null;
     let appData = { users: [], trips: [], activeTrip: null, expenses: [], payments: [] };
@@ -288,14 +295,17 @@
     });
 
     async function loginWithGoogle() {
-      const redirectUri = window.location.origin + window.location.pathname;
-      const { error } = await db.auth.signInWithOAuth({
-        provider: 'google',
-        options: {
-          redirectTo: redirectUri
-        }
-      });
-      if (error) alert('Gagal login via Google: ' + error.message);
+    // Bersihkan sesi lama yang error dari localStorage sebelum OAuth baru
+    localStorage.removeItem('gh_user_session');
+  
+    const redirectUri = window.location.origin + window.location.pathname;
+    const { error } = await db.auth.signInWithOAuth({
+    provider: 'google',
+    options: {
+      redirectTo: redirectUri
+    }
+    });
+    if (error) alert('Gagal login via Google: ' + error.message);
     }
 
     async function processAuthUser(authUser) {
