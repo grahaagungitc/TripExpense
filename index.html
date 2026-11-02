@@ -11,7 +11,7 @@
 </head>
 <body class="bg-slate-100 text-slate-800 font-sans min-h-screen">
 
-  <!-- SCREEN 1: ARCHIPELAGO SIGN IN -->
+  <!-- SCREEN 1: SIGN IN -->
   <div id="loginScreen" class="min-h-screen flex flex-col justify-between items-center p-4">
     <div class="w-full max-w-md my-auto space-y-6">
       
@@ -29,23 +29,20 @@
             You'll continue to Expense App
           </p>
           <h2 class="text-3xl font-extrabold text-slate-900 tracking-tight">Sign in</h2>
-          <p class="text-xs text-slate-500 pt-1">
-            Masuk dengan akun terdaftar untuk mengakses aplikasi.
-          </p>
+          <p class="text-xs text-slate-500 pt-1">Pilih akun Anda untuk masuk ke sistem.</p>
         </div>
 
-        <button id="btnGoogleLogin" onclick="loginWithAccount()" class="w-full p-3.5 bg-white border border-slate-300 hover:border-indigo-500 rounded-2xl flex items-center justify-between transition group shadow-sm">
-          <div class="flex items-center space-x-3 text-left">
-            <div id="userAvatar" class="w-9 h-9 rounded-full bg-indigo-100 text-indigo-700 font-bold flex items-center justify-center shrink-0 border border-indigo-200">
-              A
-            </div>
-            <div class="overflow-hidden">
-              <p class="text-xs text-slate-400 font-medium leading-none">Continue as</p>
-              <p id="googleAccEmail" class="text-sm font-bold text-slate-800 truncate mt-1">grahaagungitc@favehotels.com</p>
-            </div>
-          </div>
-          <i class="ri-arrow-right-line text-slate-400 group-hover:text-indigo-600"></i>
-        </button>
+        <div class="space-y-3">
+          <label class="text-xs font-semibold text-slate-700">Pilih User Login:</label>
+          <select id="loginUserSelect" class="w-full p-3 border border-slate-300 rounded-2xl text-sm font-semibold focus:ring-2 focus:ring-indigo-500 focus:outline-none">
+            <option value="">-- Loading users... --</option>
+          </select>
+
+          <button onclick="loginWithSelectedUser()" class="w-full p-3.5 bg-indigo-600 hover:bg-indigo-700 text-white font-bold rounded-2xl transition shadow-md flex items-center justify-center gap-2">
+            <span>Masuk ke Aplikasi</span>
+            <i class="ri-arrow-right-line"></i>
+          </button>
+        </div>
 
         <div id="loginError" class="hidden text-xs text-red-600 font-medium bg-red-50 p-3 rounded-xl border border-red-200 text-center"></div>
       </div>
@@ -82,7 +79,7 @@
       </div>
     </header>
 
-    <!-- CONTAINER DASHBOARD -->
+    <!-- DASHBOARD CONTAINER -->
     <main class="max-w-4xl mx-auto px-4 mt-4 space-y-6">
 
       <!-- EVENT BANNER -->
@@ -90,10 +87,10 @@
         <div>
           <span class="text-[10px] font-bold text-indigo-600 uppercase tracking-wider">EVENT AKTIF</span>
           <h2 class="text-xl font-bold text-slate-900" id="displayCaseName">Trip Conference 2026</h2>
-          <p class="text-xs text-slate-500">Data terhubung dengan Supabase Realtime Database</p>
+          <p class="text-xs text-slate-500">Terhubung dengan Supabase Realtime Engine</p>
         </div>
         <div class="flex gap-2">
-          <button onclick="alert('Rekap disiapkan untuk WhatsApp')" class="px-3 py-2 bg-emerald-600 hover:bg-emerald-700 text-white text-xs font-semibold rounded-xl flex items-center justify-center gap-1 shadow-sm">
+          <button onclick="shareWhatsAppRekap()" class="px-3 py-2 bg-emerald-600 hover:bg-emerald-700 text-white text-xs font-semibold rounded-xl flex items-center justify-center gap-1 shadow-sm">
             <i class="ri-whatsapp-line text-sm"></i> Share Rekap WA
           </button>
         </div>
@@ -115,20 +112,25 @@
         </button>
       </div>
 
-      <!-- PAGE 1: CATAT EXPENSE -->
+      <!-- PAGE 1: CATAT EXPENSE (USER & ADMIN BISA MEMBUAT SUB EXPENSE) -->
       <section id="page-catat" class="page-content bg-white p-5 rounded-2xl shadow-sm border border-slate-200 space-y-4">
-        <div class="border-b pb-3 border-slate-100">
-          <h3 class="font-bold text-slate-800 flex items-center gap-2">
-            <i class="ri-receipt-line text-indigo-600"></i> Buat Sub-Expense Baru
-          </h3>
-          <p class="text-xs text-slate-500">Anda otomatis dicatat sebagai pembuat sub-expense yang berhak melakukan approval</p>
+        <div class="border-b pb-3 border-slate-100 flex items-center justify-between">
+          <div>
+            <h3 class="font-bold text-slate-800 flex items-center gap-2">
+              <i class="ri-receipt-line text-indigo-600"></i> Buat Sub-Expense Baru
+            </h3>
+            <p class="text-xs text-slate-500">Pilih peserta terdaftar atau tambahkan nama peserta baru</p>
+          </div>
+          <button onclick="toggleQuickAddUserModal()" class="px-3 py-1.5 bg-indigo-50 hover:bg-indigo-100 text-indigo-700 text-xs font-bold rounded-xl border border-indigo-200 flex items-center gap-1">
+            <i class="ri-user-add-line"></i> + Buat User Baru
+          </button>
         </div>
 
         <form id="expenseForm" onsubmit="handleExpenseSubmit(event)" class="space-y-4">
           <div class="grid grid-cols-1 md:grid-cols-3 gap-4">
             <div class="md:col-span-2 space-y-1">
               <label class="text-xs font-semibold text-slate-700">Nama Sub-Pengeluaran / Item</label>
-              <input type="text" id="expNamaItem" required placeholder="Misal: Dinner Jimbaran / Bensin Outing" class="w-full px-3 py-2 text-sm border border-slate-300 rounded-xl focus:ring-2 focus:ring-indigo-500 focus:outline-none">
+              <input type="text" id="expNamaItem" required placeholder="Misal: Bensin, Dinner, Tiket Masuk" class="w-full px-3 py-2 text-sm border border-slate-300 rounded-xl focus:ring-2 focus:ring-indigo-500 focus:outline-none">
             </div>
             <div class="space-y-1">
               <label class="text-xs font-semibold text-slate-700">Total Nominal (Rp)</label>
@@ -138,17 +140,18 @@
 
           <div class="grid grid-cols-1 md:grid-cols-2 gap-4">
             <div class="space-y-1">
-              <label class="text-xs font-semibold text-slate-700">Yang Membayar Di Awal (Pembuat Sub):</label>
-              <input type="text" id="expPembayarDisplay" readonly class="w-full px-3 py-2 text-sm bg-slate-100 border border-slate-300 rounded-xl font-bold text-indigo-700">
+              <label class="text-xs font-semibold text-slate-700">Tentukan Siapa Yang Membayar Di Awal:</label>
+              <select id="expPembayarSelect" required class="w-full px-3 py-2 text-sm border border-slate-300 rounded-xl font-bold text-indigo-700 focus:ring-2 focus:ring-indigo-500 focus:outline-none">
+              </select>
             </div>
             <div class="space-y-1">
-              <label class="text-xs font-semibold text-slate-700">Lampirkan Foto / Struk</label>
-              <input type="file" id="expBuktiFile" accept="image/*" class="w-full text-xs text-slate-500 border border-slate-300 rounded-xl p-1.5">
+              <label class="text-xs font-semibold text-slate-700">Lampirkan Foto / File Struk</label>
+              <input type="file" id="expBuktiFile" accept="image/*,application/pdf" class="w-full text-xs text-slate-500 border border-slate-300 rounded-xl p-1.5">
             </div>
           </div>
 
           <div class="space-y-2 pt-2 border-t border-slate-100">
-            <label class="text-xs font-semibold text-slate-700">Peserta Terhitung Patungan:</label>
+            <label class="text-xs font-semibold text-slate-700">Anggota Yang Ikut Dalam Sub-Expense Ini (Centang yang ikut):</label>
             <div id="expPesertaChecklist" class="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 gap-2"></div>
           </div>
 
@@ -158,13 +161,13 @@
         </form>
       </section>
 
-      <!-- PAGE 2: SPLIT & SETTLEMENT -->
+      <!-- PAGE 2: SPLIT & SETTLEMENT (UPLOAD JPG/PDF & APPROVAL ADMIN ONLY) -->
       <section id="page-split" class="page-content hidden bg-white p-5 rounded-2xl shadow-sm border border-slate-200 space-y-4">
         <div class="border-b pb-3 border-slate-100">
           <h3 class="font-bold text-slate-800 flex items-center gap-2">
-            <i class="ri-exchange-dollar-line text-emerald-600"></i> Split Settlement & Approval Status
+            <i class="ri-exchange-dollar-line text-emerald-600"></i> Split Settlement & Approval Admin
           </h3>
-          <p class="text-xs text-slate-500">Upload bukti transfer & approval oleh pembuat sub-expense</p>
+          <p class="text-xs text-slate-500">Anggota upload bukti bayar (Gambar/PDF), Approval khusus Admin</p>
         </div>
         <div id="settlementListContainer" class="space-y-3"></div>
       </section>
@@ -179,53 +182,108 @@
         <div id="riwayatListContainer" class="divide-y divide-slate-100"></div>
       </section>
 
-      <!-- PAGE 4: ADMIN SETUP -->
+      <!-- PAGE 4: ADMIN SETUP (KHUSUS ADMIN HAS ACCESS) -->
       <section id="page-admin" class="page-content hidden bg-white p-5 rounded-2xl shadow-sm border border-slate-200 space-y-6">
         <div class="border-b pb-3 border-slate-100">
           <h3 class="font-bold text-slate-800 flex items-center gap-2 text-amber-700">
-            <i class="ri-settings-4-line"></i> Master Setup Admin
+            <i class="ri-settings-4-line"></i> Master Setup (Khusus Admin)
           </h3>
+          <p class="text-xs text-slate-500">Kelola Trip baru dan persetujuan anggota aktif per trip</p>
         </div>
 
+        <!-- BUAT TRIP BARU -->
         <div class="p-4 bg-amber-50/60 border border-amber-200 rounded-2xl space-y-3">
-          <h4 class="text-xs font-bold text-slate-800 uppercase tracking-wider">Buat Judul Trip Utama Baru</h4>
+          <h4 class="text-xs font-bold text-slate-800 uppercase tracking-wider">1. Buat Judul Trip Utama Baru</h4>
           <div class="flex gap-2">
-            <input type="text" id="newTripTitle" placeholder="Misal: Conference Outing Bali 2026" class="flex-1 px-3 py-2 text-xs border border-slate-300 rounded-xl focus:outline-none">
+            <input type="text" id="newTripTitle" placeholder="Misal: Trip Outing Bali 2026" class="flex-1 px-3 py-2 text-xs border border-slate-300 rounded-xl focus:outline-none">
             <button onclick="handleCreateNewTrip()" class="px-4 py-2 bg-amber-600 hover:bg-amber-700 text-white font-bold text-xs rounded-xl shadow-sm shrink-0">
               Buat Trip Baru
             </button>
           </div>
         </div>
 
-        <div class="p-3 bg-slate-50 border rounded-xl text-xs space-y-2">
-          <p class="font-semibold text-slate-800">Daftar User & Role System:</p>
-          <div id="adminUserList"></div>
+        <!-- SETUP ANGGOTA AKTIF PER TRIP -->
+        <div class="p-4 bg-indigo-50/60 border border-indigo-200 rounded-2xl space-y-3">
+          <h4 class="text-xs font-bold text-slate-800 uppercase tracking-wider">2. Setup Anggota Aktif Untuk Trip Saat Ini</h4>
+          <p class="text-xs text-slate-500">Centang user yang berpartisipasi dalam event ini agar muncul pada checklist pencatatan expense.</p>
+          <div id="adminTripParticipantsChecklist" class="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 gap-2"></div>
+          <button onclick="saveTripParticipants()" class="px-4 py-2 bg-indigo-600 hover:bg-indigo-700 text-white font-bold text-xs rounded-xl shadow-sm">
+            Simpan Anggota Trip
+          </button>
         </div>
       </section>
 
     </main>
   </div>
 
-  <!-- SCRIPT ENGINE (SUPABASE INTEGRATION) -->
+  <!-- MODAL QUICK ADD USER BARU -->
+  <div id="quickAddUserModal" class="hidden fixed inset-0 bg-slate-900/50 backdrop-blur-sm z-50 flex items-center justify-center p-4">
+    <div class="bg-white rounded-3xl p-6 max-w-sm w-full space-y-4 shadow-xl">
+      <div class="flex items-center justify-between border-b pb-2">
+        <h4 class="font-bold text-slate-900 text-sm">Tambah User / Anggota Baru</h4>
+        <button onclick="toggleQuickAddUserModal()" class="text-slate-400 hover:text-slate-600"><i class="ri-close-line text-xl"></i></button>
+      </div>
+      <div class="space-y-3 text-xs">
+        <div>
+          <label class="font-semibold text-slate-700">Nama Lengkap</label>
+          <input type="text" id="newUserName" placeholder="Misal: Budi Santoso" class="w-full px-3 py-2 border rounded-xl mt-1">
+        </div>
+        <div>
+          <label class="font-semibold text-slate-700">Email User</label>
+          <input type="email" id="newUserEmail" placeholder="budi@favehotels.com" class="w-full px-3 py-2 border rounded-xl mt-1">
+        </div>
+        <div>
+          <label class="font-semibold text-slate-700">Role</label>
+          <select id="newUserRole" class="w-full px-3 py-2 border rounded-xl mt-1">
+            <option value="USER">USER</option>
+            <option value="ADMIN">ADMIN</option>
+          </select>
+        </div>
+      </div>
+      <button onclick="saveNewUserFromModal()" class="w-full py-2.5 bg-indigo-600 hover:bg-indigo-700 text-white font-bold text-xs rounded-xl shadow-md">
+        Simpan User Baru
+      </button>
+    </div>
+  </div>
+
+  <!-- SCRIPT ENGINE (SUPABASE CLIENT) -->
   <script>
-    // PASTE SUPABASE CREDENTIALS ANDA DI SINI
     const SUPABASE_URL = 'https://htmmlzaxnbedweezhlyb.supabase.co';
-    const SUPABASE_KEY = 'sb_publishable_m2YTY0J9VqIBtl5sAEYhgA_YPL0oq6y';
+    const SUPABASE_KEY = 'sb_publishable_m2YTY0J9VqIBtl5sAEYhgA_YPL0o...'; // Masukkan publishable key Anda di sini
     const db = supabase.createClient(SUPABASE_URL, SUPABASE_KEY);
 
     let currentUser = null;
-    let appData = { users: [], trips: [], activeTripId: null, expenses: [], payments: [] };
+    let appData = { users: [], trips: [], activeTrip: null, expenses: [], payments: [] };
 
-    async function loginWithAccount() {
-      const targetEmail = 'grahaagungitc@favehotels.com';
-      const { data, error } = await db.from('users').select('*').eq('email', targetEmail).single();
+    window.onload = async function() {
+      await loadInitialUsersForLogin();
+      const saved = localStorage.getItem('gh_user_session');
+      if (saved) {
+        currentUser = JSON.parse(saved);
+        showDashboard();
+      }
+    };
+
+    async function loadInitialUsersForLogin() {
+      const { data: users } = await db.from('users').select('*');
+      const select = document.getElementById('loginUserSelect');
+      if (users && users.length > 0) {
+        select.innerHTML = users.map(u => `<option value="${u.email}">${u.nama} (${u.role}) - ${u.email}</option>`).join('');
+      } else {
+        select.innerHTML = `<option value="grahaagungitc@favehotels.com">A. R (IT Fave) (ADMIN)</option>`;
+      }
+    }
+
+    async function loginWithSelectedUser() {
+      const selectedEmail = document.getElementById('loginUserSelect').value;
+      const { data } = await db.from('users').select('*').eq('email', selectedEmail).maybeSingle();
 
       if (data) {
         currentUser = data;
         localStorage.setItem('gh_user_session', JSON.stringify(currentUser));
         showDashboard();
       } else {
-        alert('Email tidak terdaftar di database Supabase!');
+        alert('User tidak ditemukan!');
       }
     }
 
@@ -234,10 +292,11 @@
       document.getElementById('mainDashboard').classList.remove('hidden');
       document.getElementById('userDisplayName').innerText = currentUser.nama;
       document.getElementById('userRoleBadge').innerText = currentUser.role;
-      document.getElementById('expPembayarDisplay').value = `${currentUser.nama} (${currentUser.email})`;
 
       if (currentUser.role === 'ADMIN') {
         document.getElementById('tab-admin').classList.remove('hidden');
+      } else {
+        document.getElementById('tab-admin').classList.add('hidden');
       }
 
       switchTab('catat');
@@ -262,11 +321,11 @@
     async function fetchAppData() {
       const { data: users } = await db.from('users').select('*');
       const { data: trips } = await db.from('trips').select('*').order('created_at', { ascending: true });
-      
+
       const activeTrip = trips && trips.length > 0 ? trips[trips.length - 1] : null;
       appData.users = users || [];
       appData.trips = trips || [];
-      appData.activeTripId = activeTrip ? activeTrip.id : null;
+      appData.activeTrip = activeTrip;
 
       if (activeTrip) {
         document.getElementById('currentCaseTitle').innerText = activeTrip.judul;
@@ -282,16 +341,36 @@
     }
 
     function renderUI() {
-      // Checklist Peserta
-      document.getElementById('expPesertaChecklist').innerHTML = appData.users.map(u => `
-        <label class="flex items-center p-2.5 bg-slate-50 border border-slate-200 rounded-xl cursor-pointer">
+      const activeEmails = appData.activeTrip ? (appData.activeTrip.active_participant_emails || []) : [];
+      
+      // Filter user aktif per trip (jika belum disetup, tampilkan semua user)
+      const eligibleUsers = activeEmails.length > 0 
+        ? appData.users.filter(u => activeEmails.includes(u.email))
+        : appData.users;
+
+      // Render Dropdown Siapa Yang Membayar Di Awal
+      const pembayarSelect = document.getElementById('expPembayarSelect');
+      pembayarSelect.innerHTML = appData.users.map(u => `
+        <option value="${u.email}" ${u.email === currentUser.email ? 'selected' : ''}>${u.nama} (${u.email})</option>
+      `).join('');
+
+      // Render Checklist Peserta Dalam Sub Expense
+      document.getElementById('expPesertaChecklist').innerHTML = eligibleUsers.map(u => `
+        <label class="flex items-center p-2.5 bg-slate-50 border border-slate-200 rounded-xl cursor-pointer hover:bg-indigo-50/40">
           <input type="checkbox" value="${u.email}" checked class="exp-chk-peserta w-4 h-4 text-indigo-600 rounded">
           <span class="ml-2 text-xs font-medium text-slate-700 truncate">${u.nama}</span>
         </label>
       `).join('');
 
-      // User List Admin
-      document.getElementById('adminUserList').innerHTML = appData.users.map(u => `<p class="text-xs text-slate-600">• ${u.email} (${u.nama} - <strong>${u.role}</strong>)</p>`).join('');
+      // Render Admin Trip Setup Checklist
+      if (currentUser.role === 'ADMIN') {
+        document.getElementById('adminTripParticipantsChecklist').innerHTML = appData.users.map(u => `
+          <label class="flex items-center p-2.5 bg-white border border-slate-200 rounded-xl cursor-pointer">
+            <input type="checkbox" value="${u.email}" ${activeEmails.includes(u.email) ? 'checked' : ''} class="admin-trip-user-chk w-4 h-4 text-indigo-600 rounded">
+            <span class="ml-2 text-xs font-medium text-slate-700 truncate">${u.nama} (${u.role})</span>
+          </label>
+        `).join('');
+      }
 
       renderSettlement();
       renderRiwayat();
@@ -299,11 +378,12 @@
 
     async function handleExpenseSubmit(e) {
       e.preventDefault();
-      const selected = Array.from(document.querySelectorAll('.exp-chk-peserta:checked')).map(c => c.value);
-      if (!selected.length) return alert('Pilih minimal 1 peserta!');
+      const selectedPeserta = Array.from(document.querySelectorAll('.exp-chk-peserta:checked')).map(c => c.value);
+      if (!selectedPeserta.length) return alert('Pilih minimal 1 peserta!');
 
       const item = document.getElementById('expNamaItem').value;
       const nominal = document.getElementById('expNominal').value;
+      const pembayarEmail = document.getElementById('expPembayarSelect').value;
       const fileInput = document.getElementById('expBuktiFile');
 
       let buktiUrl = '';
@@ -312,23 +392,109 @@
         const fileName = `${Date.now()}_${file.name}`;
         const { data } = await db.storage.from('receipts').upload(fileName, file);
         if (data) {
-          const { data: publicUrlData } = db.storage.from('receipts').getPublicUrl(fileName);
-          buktiUrl = publicUrlData.publicUrl;
+          const { data: pubData } = db.storage.from('receipts').getPublicUrl(fileName);
+          buktiUrl = pubData.publicUrl;
         }
       }
 
       await db.from('expenses').insert([{
-        trip_id: appData.activeTripId,
+        trip_id: appData.activeTrip.id,
         nama_item: item,
         nominal: parseFloat(nominal),
-        pembayar_email: currentUser.email,
-        peserta_emails: selected,
+        pembayar_email: pembayarEmail,
+        peserta_emails: selectedPeserta,
         bukti_url: buktiUrl
       }]);
 
-      alert('Sub-expense berhasil dicatat!');
+      alert('Sub-Expense berhasil dicatat!');
       document.getElementById('expenseForm').reset();
-      document.getElementById('expPembayarDisplay').value = `${currentUser.nama} (${currentUser.email})`;
+      fetchAppData();
+    }
+
+    function renderSettlement() {
+      const container = document.getElementById('settlementListContainer');
+      if (!appData.expenses.length) return container.innerHTML = `<div class="text-center py-6 text-xs text-slate-400">Belum ada transaksi.</div>`;
+
+      let html = '';
+      appData.expenses.forEach(exp => {
+        const perOrang = exp.nominal / (exp.peserta_emails.length || 1);
+        exp.peserta_emails.forEach(pEmail => {
+          if (pEmail.toLowerCase() !== exp.pembayar_email.toLowerCase()) {
+            const pay = appData.payments.find(p => p.expense_id === exp.id && p.dari_email === pEmail);
+            const status = pay ? pay.status : 'BELUM_BAYAR';
+
+            html += `
+              <div class="p-4 bg-white border border-slate-200 rounded-2xl space-y-3 shadow-sm">
+                <div class="flex items-center justify-between">
+                  <div>
+                    <p class="text-xs text-slate-400">Sub Item: <strong>${exp.nama_item}</strong></p>
+                    <p class="text-sm font-bold text-slate-800">${pEmail.split('@')[0]} ➔ ${exp.pembayar_email.split('@')[0]} (Dibayar di awal)</p>
+                  </div>
+                  <p class="text-base font-extrabold text-amber-600">Rp ${perOrang.toLocaleString('id-ID')}</p>
+                </div>
+
+                <div class="pt-2 border-t border-slate-100 flex flex-col sm:flex-row items-center justify-between gap-2 text-xs">
+                  <div>
+                    <span class="px-2.5 py-1 rounded-full text-[10px] font-bold ${
+                      status === 'APPROVED' ? 'bg-emerald-100 text-emerald-700' :
+                      status === 'PENDING_APPROVAL' ? 'bg-amber-100 text-amber-800' : 'bg-red-100 text-red-600'
+                    }">${status}</span>
+                    ${pay && pay.bukti_url ? `<a href="${pay.bukti_url}" target="_blank" class="ml-2 text-indigo-600 font-bold underline"><i class="ri-file-search-line"></i> Lihat Bukti Transfer</a>` : ''}
+                  </div>
+
+                  <!-- UPLOAD BUKTI TRANSFER (BISA DIGUNAKAN ANGGOTA PEMBAYAR: JPG / PNG / PDF) -->
+                  ${pEmail.toLowerCase() === currentUser.email.toLowerCase() && status !== 'APPROVED' ? `
+                    <div class="flex items-center gap-1">
+                      <input type="file" id="uploadPay_${exp.id}" accept="image/*,application/pdf" class="text-[10px]">
+                      <button onclick="handleUploadPaymentProof('${exp.id}', '${exp.pembayar_email}', ${perOrang})" class="px-2.5 py-1 bg-indigo-600 text-white font-bold text-[10px] rounded-lg">Upload Bukti</button>
+                    </div>
+                  ` : ''}
+
+                  <!-- KHUSUS ADMIN BISA APPROVAL / REJECT -->
+                  ${currentUser.role === 'ADMIN' && pay && status === 'PENDING_APPROVAL' ? `
+                    <div class="flex gap-1">
+                      <button onclick="approvePay('${pay.id}', 'REJECTED')" class="px-2.5 py-1 bg-red-100 text-red-700 font-bold rounded-lg text-[10px]">Reject</button>
+                      <button onclick="approvePay('${pay.id}', 'APPROVED')" class="px-2.5 py-1 bg-emerald-600 text-white font-bold rounded-lg text-[10px]">Approve (Admin)</button>
+                    </div>
+                  ` : ''}
+                </div>
+              </div>
+            `;
+          }
+        });
+      });
+      container.innerHTML = html;
+    }
+
+    async function handleUploadPaymentProof(expId, keEmail, nominal) {
+      const fileInput = document.getElementById(`uploadPay_${expId}`);
+      if (!fileInput.files || !fileInput.files.length) return alert('Pilih foto/file PDF bukti pembayaran!');
+
+      const file = fileInput.files[0];
+      const fileName = `settlement_${Date.now()}_${file.name}`;
+      
+      const { data } = await db.storage.from('receipts').upload(fileName, file);
+      if (!data) return alert('Gagal mengunggah file bukti!');
+
+      const { data: pubData } = db.storage.from('receipts').getPublicUrl(fileName);
+
+      await db.from('settlement_payments').insert([{
+        trip_id: appData.activeTrip.id,
+        expense_id: expId,
+        dari_email: currentUser.email,
+        ke_email: keEmail,
+        nominal: nominal,
+        bukti_url: pubData.publicUrl,
+        status: 'PENDING_APPROVAL'
+      }]);
+
+      alert('Bukti transfer berhasil diupload! Menunggu approval Admin.');
+      fetchAppData();
+    }
+
+    async function approvePay(payId, status) {
+      await db.from('settlement_payments').update({ status: status }).eq('id', payId);
+      alert(`Status pembayaran berhasil diubah menjadi: ${status}`);
       fetchAppData();
     }
 
@@ -342,46 +508,32 @@
       fetchAppData();
     }
 
-    function renderSettlement() {
-      const container = document.getElementById('settlementListContainer');
-      if (!appData.expenses.length) return container.innerHTML = `<div class="text-center py-6 text-xs text-slate-400">Belum ada transaksi.</div>`;
-
-      let html = '';
-      appData.expenses.forEach(exp => {
-        const perOrang = exp.nominal / exp.peserta_emails.length;
-        exp.peserta_emails.forEach(pEmail => {
-          if (pEmail.toLowerCase() !== exp.pembayar_email.toLowerCase()) {
-            const pay = appData.payments.find(p => p.expense_id === exp.id && p.dari_email === pEmail);
-            const status = pay ? pay.status : 'BELUM_BAYAR';
-
-            html += `
-              <div class="p-4 bg-white border border-slate-200 rounded-2xl space-y-3">
-                <div class="flex items-center justify-between">
-                  <div>
-                    <p class="text-xs text-slate-400">Item: <strong>${exp.nama_item}</strong></p>
-                    <p class="text-sm font-bold text-slate-800">${pEmail.split('@')[0]} ➔ ${exp.pembayar_email.split('@')[0]} (Pembuat Sub)</p>
-                  </div>
-                  <p class="text-base font-extrabold text-amber-600">Rp ${perOrang.toLocaleString('id-ID')}</p>
-                </div>
-                <div class="pt-2 border-t border-slate-100 flex items-center justify-between text-xs">
-                  <span class="px-2 py-0.5 rounded-full text-[10px] font-bold ${status === 'APPROVED' ? 'bg-emerald-100 text-emerald-700' : 'bg-amber-100 text-amber-800'}">${status}</span>
-                  ${currentUser.email.toLowerCase() === exp.pembayar_email.toLowerCase() && pay && status === 'PENDING_APPROVAL' ? `
-                    <div class="flex gap-1">
-                      <button onclick="approvePay('${pay.id}', 'APPROVED')" class="px-3 py-1 bg-emerald-600 text-white font-bold rounded-lg text-[10px]">Approve</button>
-                    </div>
-                  ` : ''}
-                </div>
-              </div>
-            `;
-          }
-        });
-      });
-      container.innerHTML = html;
+    async function saveTripParticipants() {
+      const selectedEmails = Array.from(document.querySelectorAll('.admin-trip-user-chk:checked')).map(c => c.value);
+      await db.from('trips').update({ active_participant_emails: selectedEmails }).eq('id', appData.activeTrip.id);
+      alert('Daftar peserta aktif trip berhasil diperbarui!');
+      fetchAppData();
     }
 
-    async function approvePay(payId, status) {
-      await db.from('settlement_payments').update({ status: status }).eq('id', payId);
-      alert('Status pembayaran berhasil diperbarui!');
+    function toggleQuickAddUserModal() {
+      document.getElementById('quickAddUserModal').classList.toggle('hidden');
+    }
+
+    async function saveNewUserFromModal() {
+      const nama = document.getElementById('newUserName').value.trim();
+      const email = document.getElementById('newUserEmail').value.trim();
+      const role = document.getElementById('newUserRole').value;
+
+      if (!nama || !email) return alert('Lengkapi nama dan email user!');
+
+      const { error } = await db.from('users').insert([{ nama: nama, email: email, role: role }]);
+      if (error) return alert('Gagal menambah user: ' + error.message);
+
+      alert('User baru berhasil ditambahkan!');
+      toggleQuickAddUserModal();
+      document.getElementById('newUserName').value = '';
+      document.getElementById('newUserEmail').value = '';
+      await loadInitialUsersForLogin();
       fetchAppData();
     }
 
@@ -390,20 +542,16 @@
         <div class="py-3 flex items-center justify-between">
           <div>
             <p class="text-sm font-bold text-slate-800">${e.nama_item}</p>
-            <p class="text-xs text-slate-500">Pembuat: ${e.pembayar_email.split('@')[0]}</p>
+            <p class="text-xs text-slate-500">Dibayar di awal oleh: ${e.pembayar_email.split('@')[0]} • ${e.peserta_emails.length} Anggota</p>
           </div>
           <p class="text-sm font-extrabold text-slate-900">Rp ${e.nominal.toLocaleString('id-ID')}</p>
         </div>
       `).join('');
     }
 
-    window.onload = function() {
-      const saved = localStorage.getItem('gh_user_session');
-      if (saved) {
-        currentUser = JSON.parse(saved);
-        showDashboard();
-      }
-    };
+    function shareWhatsAppRekap() {
+      alert('Fungsi salin rekap disiapkan untuk dibagikan ke grup WhatsApp.');
+    }
   </script>
 </body>
 </html>
