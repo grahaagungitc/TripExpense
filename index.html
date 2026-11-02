@@ -267,74 +267,61 @@
     let appData = { users: [], trips: [], activeTrip: null, expenses: [], payments: [] };
 
     window.addEventListener('DOMContentLoaded', async function() {
-      await checkGoogleSession();
+      // Inisialisasi pendeteksi otomatis perubahan sesi autentikasi (mendukung redirect OAuth)
+      db.auth.onAuthStateChange(async (event, session) => {
+        if ((event === 'SIGNED_IN' || event === 'INITIAL_SESSION') && session) {
+          await processAuthUser(session.user);
+        }
+      });
+
+      // Cek sesi lokal / awal
+      const { data: { session } } = await db.auth.getSession();
+      if (session && session.user) {
+        await processAuthUser(session.user);
+      } else {
+        const saved = localStorage.getItem('gh_user_session');
+        if (saved) {
+          currentUser = JSON.parse(saved);
+          showDashboard();
+        }
+      }
     });
 
     async function loginWithGoogle() {
+      const redirectUri = window.location.origin + window.location.pathname;
       const { error } = await db.auth.signInWithOAuth({
         provider: 'google',
         options: {
-          redirectTo: window.location.origin + window.location.pathname
+          redirectTo: redirectUri
         }
       });
       if (error) alert('Gagal login via Google: ' + error.message);
     }
 
-    async function checkGoogleSession() {
-  console.log("1. Memulai pengecekan sesi Google...");
-  
-  // Tangkap Sesi
-  const { data: { session }, error: sessionError } = await db.auth.getSession();
-  
-  if (sessionError) {
-    console.error("Error GetSession:", sessionError.message);
-    return;
-  }
+    async function processAuthUser(authUser) {
+      if (!authUser) return;
+      const email = authUser.email;
 
-  console.log("2. Data Session dari Supabase:", session);
+      // Ambil data dari tabel public.users
+      let { data: userRecord, error } = await db.from('users').select('*').eq('email', email).maybeSingle();
 
-  if (session && session.user) {
-    const email = session.user.email;
-    console.log("3. User terdeteksi via Auth:", email);
-    
-    // Query ke tabel public.users
-    const { data: userRecord, error: dbError } = await db.from('users').select('*').eq('email', email).maybeSingle();
-    
-    if (dbError) {
-      console.error("4. Error Database RLS/Query:", dbError.message);
-      alert("Error Database: " + dbError.message);
-      return;
-    }
+      // Jika user belum ada di database, daftarkan otomatis
+      if (!userRecord) {
+        const newUser = {
+          email: email,
+          nama: authUser.user_metadata.full_name || authUser.user_metadata.name || email.split('@')[0],
+          role: email === 'grahaagungitc@favehotels.com' ? 'ADMIN' : 'USER'
+        };
 
-    console.log("5. Record User dari Database:", userRecord);
-    
-    if (userRecord) {
+        const { data: created, error: insertErr } = await db.from('users').insert([newUser]).select().maybeSingle();
+        userRecord = created || newUser;
+      }
+
       currentUser = userRecord;
       localStorage.setItem('gh_user_session', JSON.stringify(currentUser));
       showDashboard();
-    } else {
-      console.warn("6. Email tidak ditemukan di tabel users, mendaftarkan otomatis...");
-      // Auto register jika belum ada
-      const newUser = {
-        email: email,
-        nama: session.user.user_metadata.full_name || session.user.user_metadata.name || email.split('@')[0],
-        role: email === 'grahaagungitc@favehotels.com' ? 'ADMIN' : 'USER'
-      };
-      
-      const { data: created, error: insertError } = await db.from('users').insert([newUser]).select().maybeSingle();
-      if (insertError) {
-        console.error("Error Auto Insert User:", insertError.message);
-        alert("Gagal daftar user baru: " + insertError.message);
-        return;
-      }
-      currentUser = created || newUser;
-      localStorage.setItem('gh_user_session', JSON.stringify(currentUser));
-      showDashboard();
     }
-  } else {
-    console.log("Sesi OAuth tidak ditemukan pada URL redirect ini.");
-  }
-}
+
     function showDashboard() {
       document.getElementById('loginScreen').classList.add('hidden');
       document.getElementById('mainDashboard').classList.remove('hidden');
@@ -390,7 +377,7 @@
     }
 
     function renderUI() {
-      // Hitung Total Pengeluaran Event
+      // Hitung Total Pengeluaran Event Realtime
       const totalNominal = appData.expenses.reduce((sum, item) => sum + (parseFloat(item.nominal) || 0), 0);
       const formattedTotal = 'Rp ' + totalNominal.toLocaleString('id-ID');
       
