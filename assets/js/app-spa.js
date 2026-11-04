@@ -2,31 +2,79 @@ let currentUser = null;
 let currentView = 'dashboard';
 let appData = { users: [], trips: [], categories: [], expenses: [], payments: [], selectedTripId: null };
 
-// INITIALIZATION
+// -------------------------------------------------------------
+// 0. STRICT AUTHENTICATION GUARD & INITIALIZATION
+// -------------------------------------------------------------
 window.addEventListener('DOMContentLoaded', async () => {
-  const { data: { session } } = await db.auth.getSession();
-  if (!session || !session.user) {
-    window.location.href = 'login.html';
+  // 1. Ambil session aktif dari Supabase Auth
+  const { data: { session }, error: sessionError } = await db.auth.getSession();
+  
+  if (sessionError || !session || !session.user) {
+    await forceLogoutAndRedirect();
     return;
   }
 
-  const email = session.user.email.toLowerCase().trim();
-  const { data: userRecord } = await db.from('users').select('*').ilike('email', email).maybeSingle();
+  const email = session.user.email ? session.user.email.toLowerCase().trim() : '';
 
-  if (!userRecord) {
-    await db.auth.signOut();
-    alert(`Akses Ditolak: Email ${email} belum terdaftar di sistem!`);
-    window.location.href = 'login.html';
+  if (!email) {
+    await forceLogoutAndRedirect('Format email autentikasi tidak valid.');
     return;
   }
 
-  currentUser = userRecord;
-  updateUserUI();
+  // 2. Query tabel public.users untuk verifikasi email
+  try {
+    const { data: userRecord, error: dbError } = await db
+      .from('users')
+      .select('*')
+      .ilike('email', email)
+      .maybeSingle();
 
-  await refreshAppData();
-  hideLoader();
-  navigateTo('dashboard');
+    // Jika terjadi error DB atau email TIDAK TERDAFTAR di tabel users
+    if (dbError || !userRecord) {
+      console.warn(`[SECURITY GUARD] Akses ditolak untuk email: ${email}`);
+      await forceLogoutAndRedirect(`Akses Ditolak: Email (${email}) belum terdaftar di sistem. Hubungi Admin!`);
+      return;
+    }
+
+    // Jika status akun di-SET INACTIVE oleh Admin
+    if (userRecord.status === 'INACTIVE') {
+      await forceLogoutAndRedirect(`Akses Ditolak: Akun Anda (${email}) sedang dinonaktifkan oleh Admin.`);
+      return;
+    }
+
+    // 3. User lolos verifikasi -> Simpan state & jalankan aplikasi
+    currentUser = userRecord;
+    localStorage.setItem('gh_user_session', JSON.stringify(currentUser));
+    
+    updateUserUI();
+    await refreshAppData();
+    hideLoader();
+    navigateTo('dashboard');
+
+  } catch (err) {
+    console.error("Auth Guard Error:", err);
+    await forceLogoutAndRedirect("Terjadi kesalahan sistem saat memverifikasi akses Anda.");
+  }
 });
+
+// FUNGSI HARD CLEANUP & REDIRECT
+async function forceLogoutAndRedirect(errorMessage = null) {
+  hideLoader();
+  localStorage.removeItem('gh_user_session');
+  currentUser = null;
+
+  try {
+    await db.auth.signOut();
+  } catch (e) {
+    console.error("Error signing out:", e);
+  }
+
+  if (errorMessage) {
+    alert(errorMessage);
+  }
+
+  window.location.replace('login.html');
+}
 
 function updateUserUI() {
   document.getElementById('userDisplayName').innerText = currentUser.nama;
@@ -64,7 +112,9 @@ async function refreshAppData() {
   }
 }
 
+// -------------------------------------------------------------
 // CLIENT-SIDE SEAMLESS ROUTER
+// -------------------------------------------------------------
 function navigateTo(viewName) {
   if (viewName === 'setup' && currentUser.role !== 'ADMIN') {
     alert('Halaman ini khusus Admin!');
@@ -97,7 +147,7 @@ function navigateTo(viewName) {
 }
 
 // -------------------------------------------------------------
-// 1. DASHBOARD VIEW
+// 1. DASHBOARD VIEW (DENGAN DATA KATEGORI & AKUMULASI DANA)
 // -------------------------------------------------------------
 function renderDashboardView() {
   const selectedTrip = appData.trips.find(t => t.id === appData.selectedTripId) || appData.trips[0];
@@ -253,7 +303,6 @@ function onDashboardTripChange(tripId) {
 // 2. INPUT EXPENSE VIEW
 // -------------------------------------------------------------
 function renderExpenseView() {
-  // Hanya ambil user & kategori yang berstatus active (jika ada properti status)
   const activeUsers = appData.users.filter(u => u.status !== 'INACTIVE');
   const activeCategories = appData.categories.filter(c => c.status !== 'INACTIVE');
 
@@ -529,7 +578,7 @@ async function renderLogsView() {
 }
 
 // -------------------------------------------------------------
-// 5. MASTER SETUP VIEW (LENGKAP: TRIP, USER, CATEGORY - ADD, EDIT, DELETE, TOGGLE INACTIVE)
+// 5. MASTER SETUP VIEW (LENGKAP: TRIP, USER, CATEGORY - CRUD & STATUS)
 // -------------------------------------------------------------
 function renderSetupView() {
   document.getElementById('mainContentView').innerHTML = `
@@ -742,5 +791,5 @@ async function handleDeleteCategorySPA(id) {
 async function doLogout() {
   localStorage.removeItem('gh_user_session');
   await db.auth.signOut();
-  window.location.href = 'login.html';
+  window.location.replace('login.html');
 }
