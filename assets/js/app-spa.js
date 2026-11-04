@@ -570,13 +570,11 @@ function renderSettlementView() {
   
   let summaryMap = {};
 
+  // 1. Hitung utang-piutang antar anggota
   tripExpenses.forEach(exp => {
     const totalPeserta = (exp.peserta_emails && exp.peserta_emails.length) ? exp.peserta_emails.length : 1;
     const perOrang = parseFloat(exp.nominal || 0) / totalPeserta;
     const pembayarLower = (exp.pembayar_email || '').toLowerCase().trim();
-
-    // Ambil bukti foto struk dari pengeluaran awal (cek berbagai variasi nama kolom)
-    const strukUrl = exp.bukti_url || exp.bukti_foto || exp.bukti_transfer || exp.receipt_url || null;
 
     (exp.peserta_emails || []).forEach(pEmailRaw => {
       const pesertaLower = (pEmailRaw || '').toLowerCase().trim();
@@ -594,17 +592,30 @@ function renderSettlementView() {
         }
 
         summaryMap[pairKey].totalNominal += perOrang;
+      }
+    });
+  });
 
-        // Masukkan nota / struk jika tersedia
-        if (strukUrl) {
-          const isExist = summaryMap[pairKey].expenseStruks.some(s => s.url === strukUrl);
-          if (!isExist) {
-            summaryMap[pairKey].expenseStruks.push({
-              item: exp.nama_item || 'Expense',
-              url: strukUrl,
-              nominal: exp.nominal
-            });
-          }
+  // 2. Kumpulkan SEMUA foto nota/struk dari transaksi yang dibayar oleh Penagih (keEmail) pada trip ini
+  Object.keys(summaryMap).forEach(pairKey => {
+    const keEmail = summaryMap[pairKey].keEmail;
+
+    const penagihExpenses = tripExpenses.filter(e => 
+      (e.pembayar_email || '').toLowerCase().trim() === keEmail
+    );
+
+    penagihExpenses.forEach(exp => {
+      // Cek variasi nama kolom URL bukti struk
+      const strukUrl = exp.bukti_url || exp.bukti_foto || exp.bukti_transfer || exp.receipt_url || null;
+
+      if (strukUrl) {
+        const isExist = summaryMap[pairKey].expenseStruks.some(s => s.url === strukUrl);
+        if (!isExist) {
+          summaryMap[pairKey].expenseStruks.push({
+            item: exp.nama_item || 'Expense',
+            url: strukUrl,
+            nominal: exp.nominal
+          });
         }
       }
     });
@@ -619,7 +630,7 @@ function renderSettlementView() {
         const isPembayar = currentUser.email.toLowerCase().trim() === s.keEmail;
         const isAdmin = currentUser.role === 'ADMIN';
 
-        // Cari data bukti pelunasan (TF) dari settlement_payments
+        // Cari record bukti pelunasan transfer dari settlement_payments
         const paymentRecord = appData.payments.find(p => 
           p.trip_id === selectedTrip.id && 
           (p.dari_email || '').toLowerCase().trim() === s.dariEmail && 
@@ -633,7 +644,7 @@ function renderSettlementView() {
         return `
           <div class="p-5 bg-slate-50 border border-slate-200/80 rounded-[20px] space-y-4 text-xs ui-card-shadow">
             
-            <!-- INFORMASI PENGUTANG & PENAGIH -->
+            <!-- INFORMASI USER -->
             <div class="flex items-center justify-between pb-3 border-b border-slate-200/60">
               <div class="flex items-center gap-2">
                 ${getUserAvatarHTML(s.dariEmail, 'w-8 h-8 text-xs')}
@@ -647,12 +658,12 @@ function renderSettlementView() {
               <span class="text-base font-black text-blue-600">Rp ${Math.round(s.totalNominal).toLocaleString('id-ID')}</span>
             </div>
 
-            <!-- SEMUA BERKAS (BUKTI TF + STRUK TRANSAKSI AWAL) -->
+            <!-- BERKAS PEMBAYARAN (BUKTI TF + NOTA EXPENSE AWAL) -->
             <div class="space-y-2 bg-white p-3.5 rounded-xl border border-slate-200/60">
               <p class="text-[10px] font-extrabold uppercase tracking-wider text-slate-400">Berkas / Lampiran Pembayaran:</p>
               
               <div class="flex flex-wrap items-center gap-2">
-                <!-- 1. BUKTI TRANSFER PELUNASAN (TF) -->
+                <!-- BUKTI TRANSFER (PELUNASAN) -->
                 ${hasBuktiTF ? `
                   <div class="flex items-center gap-1.5 bg-emerald-50 border border-emerald-200 text-emerald-700 px-3 py-1.5 rounded-xl font-bold text-[11px]">
                     <i class="ri-checkbox-circle-fill text-emerald-600"></i>
@@ -670,7 +681,7 @@ function renderSettlementView() {
 
                 <span class="text-slate-300">•</span>
 
-                <!-- 2. STRUK / NOTA PEMBAYARAN AWAL DARI PENAGIH -->
+                <!-- NOTA STRUK EXPENSE AWAL DARI PENAGIH -->
                 ${s.expenseStruks.length > 0 ? s.expenseStruks.map(st => `
                   <a href="${st.url}" target="_blank" class="flex items-center gap-1.5 bg-blue-50 border border-blue-200 text-blue-700 px-3 py-1.5 rounded-xl font-bold text-[11px] hover:bg-blue-100 transition shadow-sm">
                     <i class="ri-file-text-line text-blue-600 text-sm"></i> Struk Awal (${st.item})
