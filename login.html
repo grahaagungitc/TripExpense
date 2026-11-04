@@ -7,19 +7,28 @@
   <script src="https://cdn.tailwindcss.com"></script>
   <link href="https://cdn.jsdelivr.net/npm/remixicon@3.5.0/fonts/remixicon.css" rel="stylesheet">
   <link rel="stylesheet" href="assets/css/style.css">
-  <!-- Supabase JS SDK -->
   <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
 </head>
-<body class="bg-[#F4F6FA] flex items-center justify-center min-h-screen p-4 font-sans text-slate-800">
+<body class="bg-[#F4F6FA] flex items-center justify-center min-h-screen p-4 font-sans text-slate-800 antialiased">
 
-  <div class="w-full max-w-md bg-white p-8 rounded-[28px] ui-card-shadow border border-slate-200/70 text-center space-y-6">
+  <div class="w-full max-w-md bg-white p-8 rounded-[28px] ui-card-shadow border border-slate-200/70 text-center space-y-6 relative overflow-hidden">
+    
     <div class="w-14 h-14 bg-blue-600 rounded-2xl flex items-center justify-center text-white text-3xl mx-auto shadow-lg shadow-blue-500/30">
       <i class="ri-wallet-3-line"></i>
     </div>
     
     <div class="space-y-1">
       <h2 class="text-2xl font-black text-slate-900 brand-font">Sign in</h2>
-      <p class="text-xs text-slate-400 font-semibold">Akses terbatas hanya untuk email yang sudah terdaftar oleh Admin.</p>
+      <p class="text-xs text-slate-400 font-semibold">Akses terbatas hanya untuk email yang terdaftar oleh Admin.</p>
+    </div>
+
+    <!-- MODERN ALERT BOX (TAMPIL SAAT AKSES DITOLAK) -->
+    <div id="errorAlertBox" class="hidden p-4 bg-rose-50 border border-rose-200 rounded-2xl text-left space-y-1">
+      <div class="flex items-center gap-2 text-rose-700 font-bold text-xs">
+        <i class="ri-error-warning-fill text-base"></i>
+        <span id="errorAlertTitle">Akses Ditolak!</span>
+      </div>
+      <p id="errorAlertMessage" class="text-[11px] text-rose-600 font-semibold leading-relaxed"></p>
     </div>
 
     <!-- TOMBOL SIGN IN WITH GOOGLE -->
@@ -36,11 +45,17 @@
 
   <script src="assets/js/supabase-client.js"></script>
   <script>
+    function showErrorAlert(title, message) {
+      const box = document.getElementById('errorAlertBox');
+      document.getElementById('errorAlertTitle').innerText = title;
+      document.getElementById('errorAlertMessage').innerText = message;
+      box.classList.remove('hidden');
+    }
+
     async function loginGoogle() {
       const btnText = document.getElementById('btnGoogleText');
       btnText.innerText = 'Mengarahkan ke Google...';
 
-      // Pastikan URL pengalihan dinamis menunjuk ke app.html
       let currentPath = window.location.pathname;
       if (currentPath.endsWith('login.html')) {
         currentPath = currentPath.replace('login.html', 'app.html');
@@ -55,25 +70,50 @@
       try {
         const { error } = await db.auth.signInWithOAuth({
           provider: 'google',
-          options: { 
-            redirectTo: redirectUri 
-          }
+          options: { redirectTo: redirectUri }
         });
 
         if (error) {
-          alert('Gagal melakukan login: ' + error.message);
+          showErrorAlert('Gagal Authentikasi', error.message);
           btnText.innerText = 'Sign in with Google';
         }
       } catch (err) {
-        alert('Terjadi kesalahan koneksi Supabase.');
+        showErrorAlert('Error Koneksi', 'Terjadi kesalahan koneksi ke server Supabase.');
         btnText.innerText = 'Sign in with Google';
       }
     }
 
-    // Jika sudah ada sesi aktif, otomatis arahkan ke app.html
+    // CHECK USER AUTHORIZATION DISINI SEBELUM MASUK KE APP.HTML
     window.addEventListener('DOMContentLoaded', async () => {
       const { data: { session } } = await db.auth.getSession();
+      
       if (session && session.user) {
+        const email = session.user.email ? session.user.email.toLowerCase().trim() : '';
+        
+        // Verifikasi ke database tabel public.users
+        const { data: userRecord, error: dbError } = await db
+          .from('users')
+          .select('*')
+          .ilike('email', email)
+          .maybeSingle();
+
+        if (dbError || !userRecord) {
+          // EMAIL TIDAK TERDAFTAR -> LOGOUT OTOMATIS & TAMPILKAN ERROR
+          await db.auth.signOut();
+          localStorage.removeItem('gh_user_session');
+          showErrorAlert('Akses Ditolak!', `Email (${email}) belum terdaftar di sistem. Silakan minta Admin untuk menambahkan email Anda.`);
+          return;
+        }
+
+        if (userRecord.status === 'INACTIVE') {
+          // EMAIL INACTIVE -> LOGOUT OTOMATIS & TAMPILKAN ERROR
+          await db.auth.signOut();
+          localStorage.removeItem('gh_user_session');
+          showErrorAlert('Akun Dinonaktifkan!', `Akun (${email}) sedang dinonaktifkan oleh Admin. Hubungi Admin Anda.`);
+          return;
+        }
+
+        // LOLOS VERIFIKASI -> ARAHKAN KE APP.HTML
         let currentPath = window.location.pathname;
         if (currentPath.endsWith('login.html')) {
           window.location.href = currentPath.replace('login.html', 'app.html');
