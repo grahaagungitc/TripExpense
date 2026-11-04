@@ -105,7 +105,7 @@
             Akses Terbatas Terverifikasi
           </p>
           <h2 class="text-3xl font-extrabold text-slate-900 tracking-tight">Sign in</h2>
-          <p class="text-xs text-slate-500 pt-1">Hanya email yang sudah didaftarkan oleh Admin yang dapat masuk.</p>
+          <p class="text-xs text-slate-500 pt-1">Hanya email yang sudah terdaftar oleh Admin yang dapat masuk.</p>
         </div>
 
         <button onclick="loginWithGoogle()" class="w-full py-3.5 px-4 bg-white border border-slate-300 hover:border-indigo-500 hover:bg-slate-50 text-slate-700 font-bold rounded-2xl transition shadow-sm flex items-center justify-center gap-3">
@@ -547,16 +547,16 @@
       if (error) showToast('Gagal login via Google: ' + error.message, 'error');
     }
 
-    // AUTHENTICATION STRICT SECURITY (VALIDASI DENGAN TABEL USERS)
+    // STRICT AUTHENTICATION SECURITY: TANPA AUTO REGISTER
     async function processAuthUser(authUser) {
       if (!authUser) return;
-      const email = authUser.email;
+      const email = authUser.email ? authUser.email.toLowerCase().trim() : '';
 
-      // Cek apakah email terdaftar di tabel users Supabase
-      let { data: userRecord } = await db.from('users').select('*').eq('email', email).maybeSingle();
+      // Cari apakah email persis terdaftar di tabel users
+      let { data: userRecord, error } = await db.from('users').select('*').ilike('email', email).maybeSingle();
 
       if (!userRecord) {
-        // TANGKAP DAN KELUARKAN USER JIKA EMAIL TIDAK TERDAFTAR
+        // JIKA TIDAK TERDAFTAR: PAKSA SIGN OUT DAN BERI PERINGATAN
         await db.auth.signOut();
         localStorage.removeItem('gh_user_session');
         currentUser = null;
@@ -564,10 +564,11 @@
         document.getElementById('mainDashboard').classList.add('hidden');
         document.getElementById('loginScreen').classList.remove('hidden');
 
-        showToast(`Akses Ditolak: Email ${email} belum terdaftar di sistem. Hubungi Admin!`, 'error');
+        showToast(`Akses Ditolak: Email ${email} belum terdaftar di sistem. Silakan hubungi Admin!`, 'error');
         return;
       }
 
+      // JIKA TERDAFTAR: SIMPAN USER RECORD & JALANKAN DASHBOARD
       currentUser = userRecord;
       localStorage.setItem('gh_user_session', JSON.stringify(currentUser));
       showDashboard();
@@ -652,7 +653,7 @@
 
       const pembayarSelect = document.getElementById('expPembayarSelect');
       pembayarSelect.innerHTML = appData.users.map(u => `
-        <option value="${u.email}" ${u.email === currentUser.email ? 'selected' : ''}>${u.nama} (${u.email})</option>
+        <option value="${u.email}" ${u.email.toLowerCase() === currentUser.email.toLowerCase() ? 'selected' : ''}>${u.nama} (${u.email})</option>
       `).join('');
 
       onSelectTripForExpenseChange();
@@ -728,7 +729,6 @@
       `).join('');
     }
 
-    // RENDER PARENT & CHILD TABEL DENGAN APPROVE, REJECT, DAN GALERI BUKTI
     function renderStructuredSettlement() {
       const container = document.getElementById('settlementListContainer');
       if (!appData.trips.length) return container.innerHTML = `<div class="text-center py-6 text-xs text-slate-400">Belum ada trip yang dibuat.</div>`;
@@ -759,7 +759,6 @@
           });
         });
 
-        // PARENT TRIP HEADER
         mainHtml += `
           <div class="border border-indigo-200 bg-white rounded-3xl p-5 shadow-sm space-y-5">
             <div class="flex items-center justify-between border-b pb-3 border-indigo-50">
@@ -776,7 +775,6 @@
           return;
         }
 
-        // SECTION 1: CARD RINGKASAN TOTAL SETTLEMENT
         mainHtml += `
           <div class="space-y-3">
             <h5 class="text-xs font-extrabold text-slate-700 uppercase tracking-wider flex items-center gap-1.5">
@@ -861,9 +859,8 @@
           `;
         });
 
-        mainHtml += `</div></div>`; // End Summary Grid
+        mainHtml += `</div></div>`;
 
-        // SECTION 2: TABEL RINCIAN CHILD EXPENSES
         mainHtml += `
           <div class="space-y-3 pt-2">
             <h5 class="text-xs font-extrabold text-slate-700 uppercase tracking-wider flex items-center gap-1.5">
@@ -922,7 +919,6 @@
                     }">${status === 'APPROVED' ? 'COMPLETE' : status === 'PENDING_APPROVAL' ? 'PROSES APPROVAL' : status === 'REJECTED' ? 'REJECTED' : 'BELUM DIBAYAR'}</span>
                   </td>
                   
-                  <!-- STRUK NOTA -->
                   <td class="p-3 text-center">
                     <div class="flex items-center justify-center gap-1">
                       ${exp.bukti_url ? `
@@ -940,7 +936,6 @@
                     </div>
                   </td>
 
-                  <!-- BUKTI TF -->
                   <td class="p-3 text-center">
                     <div class="flex items-center justify-center gap-1">
                       ${hasChildProof ? `
@@ -951,7 +946,6 @@
                     </div>
                   </td>
 
-                  <!-- AKSI: UPLOAD / APPROVE / REJECT -->
                   <td class="p-3 text-right">
                     <div class="flex items-center justify-end gap-1">
                       ${(isUserPengutang || currentUser.role === 'ADMIN') && status !== 'APPROVED' ? `
@@ -990,7 +984,6 @@
       container.innerHTML = mainHtml;
     }
 
-    // EDIT STRUK NOTA PENGELUARAN
     async function handleEditStrukExpense(event, expId) {
       const file = event.target.files[0];
       if (!file) return;
@@ -1011,7 +1004,6 @@
       fetchAppData();
     }
 
-    // UPLOAD / RE-UPLOAD BULK PROOF
     async function handleUploadBulkProof(event, tripId, dariEmail, keEmail, totalNominal) {
       const file = event.target.files[0];
       if (!file) return;
@@ -1055,7 +1047,6 @@
       fetchAppData();
     }
 
-    // UPLOAD / RE-UPLOAD CHILD PROOF
     async function handleUploadChildProof(event, expId, keEmail, dariEmail, nominal) {
       const file = event.target.files[0];
       if (!file) return;
@@ -1092,7 +1083,6 @@
       fetchAppData();
     }
 
-    // UPDATE STATUS BULK PARENT (APPROVE / REJECT)
     function updateBulkStatus(tripId, dariEmail, keEmail, statusTarget) {
       const dariNama = getUserNameByEmail(dariEmail);
       const keNama = getUserNameByEmail(keEmail);
@@ -1143,7 +1133,6 @@
       fetchAppData();
     }
 
-    // HANDLER ADMIN SETUP & SUB-EXPENSE SUBMIT
     async function handleCreateNewTrip() {
       const judul = document.getElementById('newTripTitle').value.trim();
       if (!judul) return showToast('Masukkan judul trip!', 'error');
@@ -1170,7 +1159,7 @@
 
     async function handleAdminAddUser() {
       const nama = document.getElementById('adminNewUserName').value.trim();
-      const email = document.getElementById('adminNewUserEmail').value.trim();
+      const email = document.getElementById('adminNewUserEmail').value.trim().toLowerCase();
       const role = document.getElementById('adminNewUserRole').value;
 
       if (!nama || !email) return showToast('Lengkapi nama dan email user!', 'error');
@@ -1303,7 +1292,7 @@
       const activeExpenses = appData.expenses.filter(e => appData.activeTrip && e.trip_id === appData.activeTrip.id);
       const totalNominal = activeExpenses.reduce((sum, item) => sum + (parseFloat(item.nominal) || 0), 0);
       let text = `*REKAP EXPENSE TRIP: ${appData.activeTrip ? appData.activeTrip.judul : '-'}*\n`;
-      text += `Total Pengeluaran: Rp ${totalNominal.toLocaleString('id-ID')}\n\n`;
+      text me += `Total Pengeluaran: Rp ${totalNominal.toLocaleString('id-ID')}\n\n`;
       text += `*Rincian Sub-Expense:*\n`;
       activeExpenses.forEach((e, idx) => {
         text += `${idx + 1}. [${e.kategori || 'Umum'}] ${e.nama_item} - Rp ${parseFloat(e.nominal).toLocaleString('id-ID')} (Dibayar: ${getUserNameByEmail(e.pembayar_email)})\n`;
