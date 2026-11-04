@@ -569,11 +569,16 @@ function renderSettlementView() {
   const tripExpenses = appData.expenses.filter(e => selectedTrip && e.trip_id === selectedTrip.id);
   
   let summaryMap = {};
+
   tripExpenses.forEach(exp => {
-    const perOrang = parseFloat(exp.nominal || 0) / (exp.peserta_emails.length || 1);
+    const totalPeserta = (exp.peserta_emails && exp.peserta_emails.length) ? exp.peserta_emails.length : 1;
+    const perOrang = parseFloat(exp.nominal || 0) / totalPeserta;
     const pembayarLower = (exp.pembayar_email || '').toLowerCase().trim();
 
-    exp.peserta_emails.forEach(pEmailRaw => {
+    // Ambil bukti foto struk dari pengeluaran awal (cek berbagai variasi nama kolom)
+    const strukUrl = exp.bukti_url || exp.bukti_foto || exp.bukti_transfer || exp.receipt_url || null;
+
+    (exp.peserta_emails || []).forEach(pEmailRaw => {
       const pesertaLower = (pEmailRaw || '').toLowerCase().trim();
 
       if (pesertaLower !== pembayarLower) {
@@ -590,13 +595,13 @@ function renderSettlementView() {
 
         summaryMap[pairKey].totalNominal += perOrang;
 
-        // Kumpulkan semua nota/struk dari item transaksi yang bersangkutan
-        if (exp.bukti_url) {
-          const isExist = summaryMap[pairKey].expenseStruks.some(s => s.url === exp.bukti_url);
+        // Masukkan nota / struk jika tersedia
+        if (strukUrl) {
+          const isExist = summaryMap[pairKey].expenseStruks.some(s => s.url === strukUrl);
           if (!isExist) {
             summaryMap[pairKey].expenseStruks.push({
-              item: exp.nama_item,
-              url: exp.bukti_url,
+              item: exp.nama_item || 'Expense',
+              url: strukUrl,
               nominal: exp.nominal
             });
           }
@@ -614,7 +619,7 @@ function renderSettlementView() {
         const isPembayar = currentUser.email.toLowerCase().trim() === s.keEmail;
         const isAdmin = currentUser.role === 'ADMIN';
 
-        // Cari data pembayaran dari state
+        // Cari data bukti pelunasan (TF) dari settlement_payments
         const paymentRecord = appData.payments.find(p => 
           p.trip_id === selectedTrip.id && 
           (p.dari_email || '').toLowerCase().trim() === s.dariEmail && 
@@ -622,7 +627,7 @@ function renderSettlementView() {
         );
 
         const status = paymentRecord ? paymentRecord.status : 'PENDING';
-        const buktiTfUrl = paymentRecord ? paymentRecord.bukti_url : null;
+        const buktiTfUrl = paymentRecord ? (paymentRecord.bukti_url || paymentRecord.bukti_tf) : null;
         const hasBuktiTF = !!buktiTfUrl;
 
         return `
@@ -642,12 +647,12 @@ function renderSettlementView() {
               <span class="text-base font-black text-blue-600">Rp ${Math.round(s.totalNominal).toLocaleString('id-ID')}</span>
             </div>
 
-            <!-- SEMUA BERKAS (BUKTI TF + NOTA EXPENSE) -->
-            <div class="space-y-2 bg-white p-3 rounded-xl border border-slate-200/60">
+            <!-- SEMUA BERKAS (BUKTI TF + STRUK TRANSAKSI AWAL) -->
+            <div class="space-y-2 bg-white p-3.5 rounded-xl border border-slate-200/60">
               <p class="text-[10px] font-extrabold uppercase tracking-wider text-slate-400">Berkas / Lampiran Pembayaran:</p>
               
               <div class="flex flex-wrap items-center gap-2">
-                <!-- BUKTI TRANSFER (TF) -->
+                <!-- 1. BUKTI TRANSFER PELUNASAN (TF) -->
                 ${hasBuktiTF ? `
                   <div class="flex items-center gap-1.5 bg-emerald-50 border border-emerald-200 text-emerald-700 px-3 py-1.5 rounded-xl font-bold text-[11px]">
                     <i class="ri-checkbox-circle-fill text-emerald-600"></i>
@@ -660,15 +665,19 @@ function renderSettlementView() {
                     ` : ''}
                   </div>
                 ` : `
-                  <span class="text-[11px] text-slate-400 italic">Belum ada Bukti TF</span>
+                  <span class="text-[11px] text-slate-400 font-semibold italic">Belum ada Bukti TF</span>
                 `}
 
-                <!-- DAFTAR NOTA / STRUK DARI INPUT EXPENSE -->
+                <span class="text-slate-300">•</span>
+
+                <!-- 2. STRUK / NOTA PEMBAYARAN AWAL DARI PENAGIH -->
                 ${s.expenseStruks.length > 0 ? s.expenseStruks.map(st => `
-                  <a href="${st.url}" target="_blank" class="flex items-center gap-1.5 bg-blue-50 border border-blue-200 text-blue-700 px-3 py-1.5 rounded-xl font-bold text-[11px] hover:bg-blue-100 transition">
-                    <i class="ri-file-text-line text-blue-600"></i> Nota: ${st.item}
+                  <a href="${st.url}" target="_blank" class="flex items-center gap-1.5 bg-blue-50 border border-blue-200 text-blue-700 px-3 py-1.5 rounded-xl font-bold text-[11px] hover:bg-blue-100 transition shadow-sm">
+                    <i class="ri-file-text-line text-blue-600 text-sm"></i> Struk Awal (${st.item})
                   </a>
-                `).join('') : '<span class="text-[11px] text-slate-400 italic">• Tidak ada foto nota expense</span>'}
+                `).join('') : `
+                  <span class="text-[11px] text-slate-400 font-semibold italic">Tidak ada foto nota expense</span>
+                `}
               </div>
             </div>
 
