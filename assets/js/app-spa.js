@@ -3,14 +3,34 @@ let currentView = 'dashboard';
 let appData = { users: [], trips: [], categories: [], expenses: [], payments: [], selectedTripId: null };
 
 // -------------------------------------------------------------
-// HELPER UTILS: EMAIL TO NAME & MODERN NOTIFICATIONS
+// HELPER UTILS: USER AVATAR & NAME MATCHING
 // -------------------------------------------------------------
-function getUserNameByEmail(email) {
-  if (!email) return 'Unknown';
-  const target = appData.users.find(u => u.email.toLowerCase().trim() === email.toLowerCase().trim());
-  return target ? target.nama : email.split('@')[0];
+function getUserByEmail(email) {
+  if (!email) return null;
+  return appData.users.find(u => u.email.toLowerCase().trim() === email.toLowerCase().trim()) || null;
 }
 
+function getUserNameByEmail(email) {
+  const u = getUserByEmail(email);
+  return u ? u.nama : (email ? email.split('@')[0] : 'Unknown');
+}
+
+function getUserAvatarHTML(email, sizeClasses = 'w-7 h-7 text-xs') {
+  const u = getUserByEmail(email);
+  const name = u ? u.nama : (email ? email.split('@')[0] : 'U');
+  const avatarUrl = u && u.avatar_url ? u.avatar_url : null;
+
+  if (avatarUrl) {
+    return `<img src="${avatarUrl}" alt="${name}" class="${sizeClasses} rounded-full object-cover border border-slate-200/80 shadow-sm shrink-0" referrerpolicy="no-referrer" onError="this.onerror=null; this.outerHTML='<div class=\\'${sizeClasses} rounded-full bg-blue-600 text-white font-extrabold flex items-center justify-center border border-white/40 shrink-0 shadow-sm\\'>${name.charAt(0).toUpperCase()}</div>';">`;
+  }
+
+  const initial = name.charAt(0).toUpperCase();
+  return `<div class="${sizeClasses} rounded-full bg-blue-600 text-white font-extrabold flex items-center justify-center border border-white/40 shrink-0 shadow-sm">${initial}</div>`;
+}
+
+// -------------------------------------------------------------
+// NOTIFICATION & MODAL SYSTEM
+// -------------------------------------------------------------
 function showToast(message, type = 'info') {
   const container = document.getElementById('toastContainer');
   if (!container) return;
@@ -60,7 +80,7 @@ function closeCustomModal(result) {
 }
 
 // -------------------------------------------------------------
-// 0. STRICT AUTHENTICATION GUARD & INITIALIZATION
+// 0. AUTHENTICATION & INITIALIZATION
 // -------------------------------------------------------------
 window.addEventListener('DOMContentLoaded', async () => {
   const { data: { session }, error: sessionError } = await db.auth.getSession();
@@ -71,6 +91,8 @@ window.addEventListener('DOMContentLoaded', async () => {
   }
 
   const email = session.user.email ? session.user.email.toLowerCase().trim() : '';
+  const googleAvatar = session.user.user_metadata ? session.user.user_metadata.avatar_url : null;
+
   if (!email) {
     await forceLogoutAndRedirect('Format email autentikasi tidak valid.');
     return;
@@ -91,6 +113,12 @@ window.addEventListener('DOMContentLoaded', async () => {
     if (userRecord.status === 'INACTIVE') {
       await forceLogoutAndRedirect(`Akses Ditolak: Akun Anda (${email}) sedang dinonaktifkan oleh Admin.`);
       return;
+    }
+
+    // Update avatar_url dari Google Auth jika ada
+    if (googleAvatar && userRecord.avatar_url !== googleAvatar) {
+      await db.from('users').update({ avatar_url: googleAvatar }).eq('id', userRecord.id);
+      userRecord.avatar_url = googleAvatar;
     }
 
     currentUser = userRecord;
@@ -121,7 +149,11 @@ async function forceLogoutAndRedirect(errorMessage = null) {
 function updateUserUI() {
   document.getElementById('userDisplayName').innerText = currentUser.nama;
   document.getElementById('userRoleBadge').innerText = currentUser.role;
-  document.getElementById('userAvatar').innerText = (currentUser.nama || 'U').charAt(0).toUpperCase();
+  
+  const avatarContainer = document.getElementById('userAvatar');
+  if (avatarContainer) {
+    avatarContainer.outerHTML = getUserAvatarHTML(currentUser.email, 'w-9 h-9 id="userAvatar"');
+  }
 
   if (currentUser.role === 'ADMIN') {
     document.getElementById('nav-setup').classList.remove('hidden');
@@ -162,7 +194,7 @@ async function refreshAppData() {
 }
 
 // -------------------------------------------------------------
-// CLIENT-SIDE ROUTER
+// CLIENT ROUTER & HEADER SELECTOR
 // -------------------------------------------------------------
 function navigateTo(viewName) {
   if (viewName === 'setup' && currentUser.role !== 'ADMIN') {
@@ -217,15 +249,13 @@ function onGlobalTripChange(tripId) {
 }
 
 // -------------------------------------------------------------
-// 1. DASHBOARD VIEW
+// 1. DASHBOARD VIEW WITH USER AVATARS
 // -------------------------------------------------------------
 function renderDashboardView() {
   const selectedTrip = appData.trips.find(t => t.id === appData.selectedTripId);
   const tripExpenses = appData.expenses.filter(e => selectedTrip && e.trip_id === selectedTrip.id);
-  
   const totalEventNominal = tripExpenses.reduce((sum, e) => sum + parseFloat(e.nominal || 0), 0);
   
-  // Ambil peserta terpilih dari Trip
   const assignedTripEmails = (selectedTrip && selectedTrip.active_participant_emails && selectedTrip.active_participant_emails.length > 0)
     ? selectedTrip.active_participant_emails
     : appData.users.filter(u => u.status !== 'INACTIVE').map(u => u.email);
@@ -248,7 +278,7 @@ function renderDashboardView() {
     pesertaList.forEach(pEmailRaw => {
       const peserta = pEmailRaw.toLowerCase().trim();
       if (peserta !== pembayar) {
-        const pay = appData.payments.find(p => p.expense_id === exp.id && p.dari_email.toLowerCase().trim() === peserta);
+        const pay = appData.payments.find(p => p.trip_id === exp.trip_id && p.dari_email.toLowerCase().trim() === peserta && p.ke_email.toLowerCase().trim() === pembayar);
         const isLunas = pay && pay.status === 'APPROVED';
 
         if (!isLunas) {
@@ -310,7 +340,7 @@ function renderDashboardView() {
     <div class="grid grid-cols-1 lg:grid-cols-3 gap-6">
       <div class="lg:col-span-2 bg-white p-6 rounded-[24px] border border-slate-200/70 ui-card-shadow space-y-4">
         <div class="flex items-center justify-between border-b border-slate-100 pb-3">
-          <h3 class="font-extrabold text-slate-900 text-sm brand-font">Rincian Tagihan Per Anggota (Trip Ini)</h3>
+          <h3 class="font-extrabold text-slate-900 text-sm brand-font">Rincian Tagihan Per Anggota</h3>
           <span class="text-[11px] font-bold text-slate-400">Status Terbaru</span>
         </div>
         <div class="divide-y divide-slate-100">
@@ -323,9 +353,12 @@ function renderDashboardView() {
 
                 return `
                   <div class="py-3.5 flex items-center justify-between text-xs">
-                    <div>
-                      <p class="font-extrabold text-slate-900">${namaUser} <span class="text-[10px] text-slate-400 font-semibold">(${email})</span></p>
-                      <p class="text-[11px] text-slate-400 font-semibold">Piutang: Rp ${Math.round(item.piutang).toLocaleString('id-ID')} • Utang: Rp ${Math.round(item.utang).toLocaleString('id-ID')}</p>
+                    <div class="flex items-center gap-3">
+                      ${getUserAvatarHTML(email, 'w-8 h-8 text-xs')}
+                      <div>
+                        <p class="font-extrabold text-slate-900">${namaUser} <span class="text-[10px] text-slate-400 font-semibold">(${email})</span></p>
+                        <p class="text-[11px] text-slate-400 font-semibold">Piutang: Rp ${Math.round(item.piutang).toLocaleString('id-ID')} • Utang: Rp ${Math.round(item.utang).toLocaleString('id-ID')}</p>
+                      </div>
                     </div>
                     <div>
                       ${selisih > 0 
@@ -371,13 +404,12 @@ function renderDashboardView() {
 }
 
 // -------------------------------------------------------------
-// 2. INPUT EXPENSE VIEW (HANYA MENAMPILKAN USER TER-ASSIGN KE TRIP)
+// 2. INPUT EXPENSE VIEW
 // -------------------------------------------------------------
 function renderExpenseView() {
   const selectedTrip = appData.trips.find(t => t.id === appData.selectedTripId);
   const activeCategories = appData.categories.filter(c => c.status !== 'INACTIVE');
   
-  // Filter User yang aktif & ter-assign ke trip ini
   const assignedTripEmails = (selectedTrip && selectedTrip.active_participant_emails && selectedTrip.active_participant_emails.length > 0)
     ? selectedTrip.active_participant_emails
     : appData.users.filter(u => u.status !== 'INACTIVE').map(u => u.email);
@@ -425,27 +457,28 @@ function renderExpenseView() {
             </select>
           </div>
           <div class="space-y-1">
-            <label class="text-xs font-bold text-slate-700 uppercase">Foto Struk / Nota</label>
+            <label class="text-xs font-bold text-slate-700 uppercase">Foto Struk / Nota Pembayaran Awal</label>
             <input type="file" id="expBuktiFile" accept="image/*,application/pdf" class="w-full text-xs text-slate-500 border border-slate-200 rounded-xl p-2 bg-slate-50">
           </div>
         </div>
 
         <div class="space-y-2 pt-2 border-t border-slate-100">
-          <label class="text-xs font-bold text-slate-700 uppercase">Anggota Yang Menanggung Tagihan Ini (Anggota Trip Terdaftar):</label>
+          <label class="text-xs font-bold text-slate-700 uppercase">Anggota Yang Menanggung Tagihan Ini:</label>
           <div id="expPesertaChecklistContainer" class="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 gap-2">
             ${eligibleUsers.length === 0 
-              ? `<p class="text-xs text-slate-400 italic col-span-4">Belum ada anggota yang di-assign ke trip ini. Buka Master Setup untuk assign anggota.</p>`
+              ? `<p class="text-xs text-slate-400 italic col-span-4">Belum ada anggota yang di-assign ke trip ini.</p>`
               : eligibleUsers.map(u => `
-                  <label class="flex items-center p-2.5 bg-slate-50 border border-slate-200/70 rounded-xl cursor-pointer">
+                  <label class="flex items-center p-2.5 bg-slate-50 border border-slate-200/70 rounded-xl cursor-pointer gap-2">
                     <input type="checkbox" value="${u.email}" checked class="exp-chk-peserta w-4 h-4 text-blue-600 rounded">
-                    <span class="ml-2 text-xs font-bold text-slate-700 truncate">${u.nama}</span>
+                    ${getUserAvatarHTML(u.email, 'w-6 h-6 text-[10px]')}
+                    <span class="text-xs font-bold text-slate-700 truncate">${u.nama}</span>
                   </label>
                 `).join('')}
           </div>
         </div>
 
         <button type="submit" id="btnSaveExpense" class="w-full py-3 bg-blue-600 hover:bg-blue-700 text-white font-bold text-xs rounded-xl shadow-lg transition flex items-center justify-center gap-2">
-          <i class="ri-save-line text-sm"></i> Simpan Sub-Expense ke Trip Ini
+          <i class="ri-save-line text-sm"></i> Simpan Sub-Expense
         </button>
       </form>
     </section>
@@ -460,14 +493,23 @@ function renderExpenseView() {
           ? `<p class="py-4 text-center text-xs text-slate-400 font-semibold">Belum ada transaksi dicatat untuk trip ini.</p>`
           : scopedExpenses.map(e => `
               <div class="py-3 flex items-center justify-between text-xs">
-                <div>
-                  <span class="px-2 py-0.5 bg-blue-50 text-blue-600 rounded-full font-black text-[10px]">${e.kategori || 'Umum'}</span>
-                  <p class="font-black text-slate-900 mt-1">${e.nama_item}</p>
-                  <p class="text-slate-400 text-[11px] font-semibold">Dibayar oleh: <strong>${getUserNameByEmail(e.pembayar_email)}</strong> • ${e.peserta_emails.length} Peserta</p>
+                <div class="flex items-center gap-3">
+                  ${getUserAvatarHTML(e.pembayar_email, 'w-8 h-8 text-xs')}
+                  <div>
+                    <span class="px-2 py-0.5 bg-blue-50 text-blue-600 rounded-full font-black text-[10px]">${e.kategori || 'Umum'}</span>
+                    <p class="font-black text-slate-900 mt-1">${e.nama_item}</p>
+                    <p class="text-slate-400 text-[11px] font-semibold">Dibayar oleh: <strong>${getUserNameByEmail(e.pembayar_email)}</strong> • ${e.peserta_emails.length} Peserta</p>
+                  </div>
                 </div>
-                <div class="text-right">
-                  <p class="font-black text-slate-900 text-sm">Rp ${parseFloat(e.nominal).toLocaleString('id-ID')}</p>
-                  ${e.bukti_url ? `<a href="${e.bukti_url}" target="_blank" class="text-blue-600 font-bold hover:underline text-[10px]">Lihat Struk</a>` : ''}
+                <div class="text-right flex items-center gap-3">
+                  ${e.bukti_url ? `
+                    <a href="${e.bukti_url}" target="_blank" class="px-3 py-1.5 bg-blue-50 text-blue-600 rounded-xl font-bold hover:bg-blue-100 transition flex items-center gap-1 text-[11px]">
+                      <i class="ri-file-text-line"></i> Struk Awal
+                    </a>
+                  ` : ''}
+                  <div>
+                    <p class="font-black text-slate-900 text-sm">Rp ${parseFloat(e.nominal).toLocaleString('id-ID')}</p>
+                  </div>
                 </div>
               </div>
             `).join('')}
@@ -496,7 +538,7 @@ async function handleExpenseSubmitSPA(e) {
   let buktiUrl = '';
   if (fileInput.files.length > 0) {
     const file = fileInput.files[0];
-    const fileName = `${Date.now()}_${file.name}`;
+    const fileName = `struk_${Date.now()}_${file.name}`;
     const { data } = await db.storage.from('receipts').upload(fileName, file);
     if (data) {
       const { data: pubData } = db.storage.from('receipts').getPublicUrl(fileName);
@@ -520,7 +562,7 @@ async function handleExpenseSubmitSPA(e) {
 }
 
 // -------------------------------------------------------------
-// 3. SETTLEMENT VIEW
+// 3. SETTLEMENT VIEW (APPROVAL, REJECT, BUKTI TF & EDIT FILE)
 // -------------------------------------------------------------
 function renderSettlementView() {
   const selectedTrip = appData.trips.find(t => t.id === appData.selectedTripId);
@@ -533,9 +575,17 @@ function renderSettlementView() {
       if (pEmail.toLowerCase() !== exp.pembayar_email.toLowerCase()) {
         const pairKey = `${pEmail.toLowerCase()}->${exp.pembayar_email.toLowerCase()}`;
         if (!summaryMap[pairKey]) {
-          summaryMap[pairKey] = { dariEmail: pEmail, keEmail: exp.pembayar_email, totalNominal: 0 };
+          summaryMap[pairKey] = { 
+            dariEmail: pEmail, 
+            keEmail: exp.pembayar_email, 
+            totalNominal: 0,
+            expenseStruks: []
+          };
         }
         summaryMap[pairKey].totalNominal += perOrang;
+        if (exp.bukti_url && !summaryMap[pairKey].expenseStruks.includes(exp.bukti_url)) {
+          summaryMap[pairKey].expenseStruks.push({ item: exp.nama_item, url: exp.bukti_url });
+        }
       }
     });
   });
@@ -549,25 +599,103 @@ function renderSettlementView() {
         const isPembayar = currentUser.email.toLowerCase() === s.keEmail.toLowerCase();
         const isAdmin = currentUser.role === 'ADMIN';
 
+        // Cari record payment dari database
+        const paymentRecord = appData.payments.find(p => 
+          p.trip_id === selectedTrip.id && 
+          p.dari_email.toLowerCase() === s.dariEmail.toLowerCase() && 
+          p.ke_email.toLowerCase() === s.keEmail.toLowerCase()
+        );
+
+        const status = paymentRecord ? paymentRecord.status : 'PENDING';
+        const buktiTfUrl = paymentRecord ? paymentRecord.bukti_url : null;
+        const hasBuktiTF = !!buktiTfUrl;
+
         return `
-          <div class="p-4 bg-slate-50 border border-slate-200/70 rounded-2xl space-y-3 text-xs">
-            <div class="flex items-center justify-between font-black text-slate-900">
-              <span>${dariNama} ➔ ${keNama}</span>
-              <span class="text-blue-600">Rp ${Math.round(s.totalNominal).toLocaleString('id-ID')}</span>
+          <div class="p-5 bg-slate-50 border border-slate-200/80 rounded-[20px] space-y-4 text-xs ui-card-shadow">
+            
+            <!-- HEADER USER INFO -->
+            <div class="flex items-center justify-between pb-3 border-b border-slate-200/60">
+              <div class="flex items-center gap-2">
+                ${getUserAvatarHTML(s.dariEmail, 'w-8 h-8 text-xs')}
+                <i class="ri-arrow-right-line text-slate-400 text-sm"></i>
+                ${getUserAvatarHTML(s.keEmail, 'w-8 h-8 text-xs')}
+                <div class="ml-1">
+                  <p class="font-extrabold text-slate-900">${dariNama} <span class="text-slate-400 font-normal">➔</span> ${keNama}</p>
+                  <p class="text-[10px] text-slate-400 font-semibold">${s.dariEmail}</p>
+                </div>
+              </div>
+              <span class="text-base font-black text-blue-600">Rp ${Math.round(s.totalNominal).toLocaleString('id-ID')}</span>
             </div>
-            <div class="flex items-center justify-between pt-2 border-t border-slate-200/70">
-              ${(isPengutang || isAdmin) ? `
-                <label class="cursor-pointer text-[10px] bg-white border border-blue-300 text-blue-600 px-3 py-1 rounded-full font-bold shadow-sm">
-                  Upload Bukti TF
-                  <input type="file" accept="image/*,application/pdf" class="hidden" onchange="uploadBulkProofSPA(event, '${selectedTrip.id}', '${s.dariEmail}', '${s.keEmail}')">
-                </label>
-              ` : ''}
-              ${(isPembayar || isAdmin) ? `
-                <button onclick="approveSettlementSPA('${selectedTrip.id}', '${s.dariEmail}', '${s.keEmail}')" class="text-[10px] bg-emerald-600 text-white px-3 py-1 rounded-full font-bold shadow-md">
-                  Approve Lunas
-                </button>
-              ` : ''}
+
+            <!-- PREVIEW FILE BUKTI TF & STRUK AWAL -->
+            <div class="space-y-2 bg-white p-3 rounded-xl border border-slate-200/60">
+              <p class="text-[10px] font-extrabold uppercase tracking-wider text-slate-400">Berkas / Lampiran Pembayaran:</p>
+              
+              <div class="flex flex-wrap items-center gap-2">
+                <!-- FILE BUKTI TF -->
+                ${hasBuktiTF ? `
+                  <div class="flex items-center gap-1 bg-emerald-50 border border-emerald-200 text-emerald-700 px-3 py-1.5 rounded-xl font-bold text-[11px]">
+                    <i class="ri-checkbox-circle-fill text-emerald-600"></i>
+                    <a href="${buktiTfUrl}" target="_blank" class="hover:underline">Lihat Bukti TF</a>
+                    ${(isPengutang || isAdmin) ? `
+                      <label class="cursor-pointer ml-1 text-slate-400 hover:text-blue-600" title="Ganti Bukti TF">
+                        <i class="ri-edit-line"></i>
+                        <input type="file" accept="image/*,application/pdf" class="hidden" onchange="uploadBulkProofSPA(event, '${selectedTrip.id}', '${s.dariEmail}', '${s.keEmail}')">
+                      </label>
+                    ` : ''}
+                  </div>
+                ` : `
+                  <span class="text-[11px] text-slate-400 italic">Belum ada Bukti TF</span>
+                `}
+
+                <!-- STRUK PEMBAYARAN AWAL -->
+                ${s.expenseStruks.map(st => `
+                  <a href="${st.url}" target="_blank" class="flex items-center gap-1 bg-slate-100 border border-slate-200 text-slate-700 px-3 py-1.5 rounded-xl font-bold text-[11px] hover:bg-slate-200">
+                    <i class="ri-file-list-3-line text-blue-600"></i> Struk: ${st.item}
+                  </a>
+                `).join('')}
+              </div>
             </div>
+
+            <!-- STATUS BADGE & ACTION BUTTONS -->
+            <div class="flex flex-wrap items-center justify-between gap-2 pt-1">
+              <div>
+                ${status === 'APPROVED' ? `
+                  <span class="px-3 py-1 bg-emerald-100 text-emerald-700 font-black text-[11px] rounded-full flex items-center gap-1">
+                    <i class="ri-check-double-line"></i> LUNAS (Approved)
+                  </span>
+                ` : status === 'REJECTED' ? `
+                  <span class="px-3 py-1 bg-rose-100 text-rose-700 font-black text-[11px] rounded-full flex items-center gap-1">
+                    <i class="ri-close-circle-line"></i> DITOLAK (Upload Ulang Valid)
+                  </span>
+                ` : `
+                  <span class="px-3 py-1 bg-amber-100 text-amber-700 font-black text-[11px] rounded-full flex items-center gap-1">
+                    <i class="ri-time-line"></i> MENUNGGU PROSES
+                  </span>
+                `}
+              </div>
+
+              <div class="flex items-center gap-2">
+                <!-- TOMBOL UPLOAD BUKTI TF (TAMPILKAN DAHULU JIKA BELUM DILUNASI) -->
+                ${(isPengutang || isAdmin) && status !== 'APPROVED' ? `
+                  <label class="cursor-pointer text-[11px] bg-blue-600 hover:bg-blue-700 text-white px-3.5 py-1.5 rounded-xl font-bold shadow-md transition flex items-center gap-1">
+                    <i class="ri-upload-2-line"></i> ${hasBuktiTF ? 'Ganti Bukti TF' : 'Upload Bukti TF'}
+                    <input type="file" accept="image/*,application/pdf" class="hidden" onchange="uploadBulkProofSPA(event, '${selectedTrip.id}', '${s.dariEmail}', '${s.keEmail}')">
+                  </label>
+                ` : ''}
+
+                <!-- TOMBOL APPROVE / REJECT (HANYA MUNCUL JIKA SUDAH ADA BUKTI TF) -->
+                ${(isPembayar || isAdmin) && hasBuktiTF && status !== 'APPROVED' ? `
+                  <button onclick="updateSettlementStatusSPA('${selectedTrip.id}', '${s.dariEmail}', '${s.keEmail}', 'APPROVED')" class="text-[11px] bg-emerald-600 hover:bg-emerald-700 text-white px-3 py-1.5 rounded-xl font-bold shadow-md transition">
+                    Approve Lunas
+                  </button>
+                  <button onclick="updateSettlementStatusSPA('${selectedTrip.id}', '${s.dariEmail}', '${s.keEmail}', 'REJECTED')" class="text-[11px] bg-rose-600 hover:bg-rose-700 text-white px-3 py-1.5 rounded-xl font-bold shadow-md transition">
+                    Reject
+                  </button>
+                ` : ''}
+              </div>
+            </div>
+
           </div>
         `;
       }).join('');
@@ -576,7 +704,7 @@ function renderSettlementView() {
     <div class="flex flex-col sm:flex-row sm:items-center justify-between gap-4 border-b border-slate-200/80 pb-4">
       <div>
         <h2 class="text-2xl font-black text-slate-900 brand-font">Split & Settlement</h2>
-        <p class="text-xs text-slate-400 mt-0.5">Pelunasan untuk trip: <strong>${selectedTrip ? selectedTrip.judul : 'Pilih Trip'}</strong></p>
+        <p class="text-xs text-slate-400 mt-0.5">Konfirmasi pelunasan untuk trip: <strong>${selectedTrip ? selectedTrip.judul : 'Pilih Trip'}</strong></p>
       </div>
       <div>${renderGlobalTripSelectorHTML()}</div>
     </div>
@@ -591,31 +719,63 @@ function renderSettlementView() {
   `;
 }
 
+// UPLOAD ATAU GANTI BUKTI TF
 async function uploadBulkProofSPA(event, tripId, dariEmail, keEmail) {
   const file = event.target.files[0];
   if (!file) return;
 
-  const fileName = `bulk_${Date.now()}_${file.name}`;
-  await db.storage.from('receipts').upload(fileName, file);
+  const fileName = `tf_${Date.now()}_${file.name}`;
+  const { data, error: uploadError } = await db.storage.from('receipts').upload(fileName, file);
+
+  if (uploadError) return showToast('Gagal upload bukti: ' + uploadError.message, 'error');
+
+  const { data: pubData } = db.storage.from('receipts').getPublicUrl(fileName);
+  const buktiUrl = pubData.publicUrl;
+
+  // Upsert ke settlement_payments
+  const { error: dbError } = await db.from('settlement_payments').upsert({
+    trip_id: tripId,
+    dari_email: dariEmail.toLowerCase().trim(),
+    ke_email: keEmail.toLowerCase().trim(),
+    bukti_url: buktiUrl,
+    status: 'PENDING'
+  }, { onConflict: 'trip_id,dari_email,ke_email' });
+
+  if (dbError) return showToast('Gagal update database: ' + dbError.message, 'error');
 
   await db.from('activity_logs').insert([{
-    user_email: currentUser.email, action: 'UPLOAD_PROOF', details: `Upload bukti bayar ke ${keEmail}`
+    user_email: currentUser.email, action: 'UPLOAD_PROOF', details: `Unggah bukti TF dari ${dariEmail} ke ${keEmail}`
   }]);
 
-  showToast('Bukti transfer berhasil diunggah!', 'success');
+  showToast('Bukti transfer berhasil diunggah! Menunggu approval.', 'success');
   await refreshAppData();
   renderSettlementView();
 }
 
-async function approveSettlementSPA(tripId, dariEmail, keEmail) {
-  const isConfirmed = await showCustomConfirm('Konfirmasi Pelunasan', `Setujui pelunasan dari ${getUserNameByEmail(dariEmail)}?`);
+// UPDATE STATUS APPROVAL / REJECTION
+async function updateSettlementStatusSPA(tripId, dariEmail, keEmail, newStatus) {
+  const title = newStatus === 'APPROVED' ? 'Approve Pelunasan' : 'Tolak / Reject Bukti TF';
+  const msg = newStatus === 'APPROVED' 
+    ? `Apakah Anda yakin menyetujui pelunasan dari ${getUserNameByEmail(dariEmail)}?`
+    : `Tolak bukti transfer dari ${getUserNameByEmail(dariEmail)}? Pengutang harus mengunggah bukti baru.`;
+
+  const isConfirmed = await showCustomConfirm(title, msg);
   if (!isConfirmed) return;
 
+  const { error } = await db.from('settlement_payments').upsert({
+    trip_id: tripId,
+    dari_email: dariEmail.toLowerCase().trim(),
+    ke_email: keEmail.toLowerCase().trim(),
+    status: newStatus
+  }, { onConflict: 'trip_id,dari_email,ke_email' });
+
+  if (error) return showToast('Gagal mengubah status: ' + error.message, 'error');
+
   await db.from('activity_logs').insert([{
-    user_email: currentUser.email, action: 'APPROVE_SETTLEMENT', details: `Menyetujui pelunasan dari ${dariEmail}`
+    user_email: currentUser.email, action: `SETTLEMENT_${newStatus}`, details: `${newStatus === 'APPROVED' ? 'Menyetujui' : 'Menolak'} pelunasan dari ${dariEmail}`
   }]);
 
-  showToast('Pelunasan berhasil disetujui!', 'success');
+  showToast(newStatus === 'APPROVED' ? 'Pelunasan disetujui (LUNAS)!' : 'Bukti transfer ditolak!', newStatus === 'APPROVED' ? 'success' : 'warning');
   await refreshAppData();
   renderSettlementView();
 }
@@ -650,7 +810,10 @@ function renderHistoryView() {
                         ? `<span class="px-2.5 py-0.5 bg-rose-100 text-rose-700 rounded-full text-[10px] font-black">INACTIVE / SELESAI</span>` 
                         : `<span class="px-2.5 py-0.5 bg-emerald-100 text-emerald-700 rounded-full text-[10px] font-black">AKTIF</span>`}
                     </h3>
-                    <p class="text-[11px] text-slate-400 font-semibold mt-0.5">Dibuat oleh: ${getUserNameByEmail(trip.created_by)}</p>
+                    <div class="flex items-center gap-1.5 mt-1">
+                      ${getUserAvatarHTML(trip.created_by, 'w-4 h-4 text-[9px]')}
+                      <p class="text-[11px] text-slate-400 font-semibold">Dibuat oleh: ${getUserNameByEmail(trip.created_by)}</p>
+                    </div>
                   </div>
                   <div class="text-right">
                     <span class="text-xs font-bold text-slate-400">Total Pengeluaran:</span>
@@ -665,9 +828,10 @@ function renderHistoryView() {
                       ? `<p class="py-2 text-xs text-slate-400 italic">Tidak ada transaksi.</p>`
                       : tripExpenses.map(e => `
                           <div class="py-2 flex justify-between items-center text-xs">
-                            <div>
+                            <div class="flex items-center gap-2">
+                              ${getUserAvatarHTML(e.pembayar_email, 'w-5 h-5 text-[9px]')}
                               <span class="font-bold text-slate-800">${e.nama_item}</span>
-                              <span class="text-[10px] text-slate-400">(${e.kategori || 'Umum'}) - Dibayar: ${getUserNameByEmail(e.pembayar_email)}</span>
+                              <span class="text-[10px] text-slate-400">(${e.kategori || 'Umum'})</span>
                             </div>
                             <span class="font-black text-slate-900">Rp ${parseFloat(e.nominal).toLocaleString('id-ID')}</span>
                           </div>
@@ -700,9 +864,12 @@ async function renderLogsView() {
           ? `<p class="py-4 text-center text-xs text-slate-400 font-semibold">Belum ada log aktivitas.</p>`
           : logs.map(l => `
               <div class="py-3.5 flex items-center justify-between text-xs">
-                <div>
-                  <span class="font-extrabold text-slate-900">${getUserNameByEmail(l.user_email)} (${l.user_email})</span>
-                  <p class="text-slate-500 font-semibold mt-0.5">${l.details}</p>
+                <div class="flex items-center gap-3">
+                  ${getUserAvatarHTML(l.user_email, 'w-7 h-7 text-xs')}
+                  <div>
+                    <span class="font-extrabold text-slate-900">${getUserNameByEmail(l.user_email)} (${l.user_email})</span>
+                    <p class="text-slate-500 font-semibold mt-0.5">${l.details}</p>
+                  </div>
                 </div>
                 <div class="text-right">
                   <span class="px-3 py-1 bg-blue-50 text-blue-600 rounded-full font-black text-[10px]">${l.action}</span>
@@ -716,7 +883,7 @@ async function renderLogsView() {
 }
 
 // -------------------------------------------------------------
-// 6. MASTER SETUP VIEW (WITH TRIP USER ASSIGNMENT & FULL USER EDIT)
+// 6. MASTER SETUP VIEW
 // -------------------------------------------------------------
 function renderSetupView() {
   const activeUsers = appData.users.filter(u => u.status !== 'INACTIVE');
@@ -740,9 +907,10 @@ function renderSetupView() {
           <label class="text-[11px] font-bold text-slate-500 uppercase">Pilih Anggota yang Di-assign ke Trip Ini:</label>
           <div id="newTripUsersChecklist" class="grid grid-cols-2 sm:grid-cols-4 gap-2 pt-1">
             ${activeUsers.map(u => `
-              <label class="flex items-center p-2 bg-white border border-slate-200 rounded-xl cursor-pointer">
+              <label class="flex items-center p-2 bg-white border border-slate-200 rounded-xl cursor-pointer gap-2">
                 <input type="checkbox" value="${u.email}" checked class="trip-new-chk-user w-3.5 h-3.5 text-blue-600 rounded">
-                <span class="ml-2 text-xs font-bold text-slate-700 truncate">${u.nama}</span>
+                ${getUserAvatarHTML(u.email, 'w-5 h-5 text-[9px]')}
+                <span class="text-xs font-bold text-slate-700 truncate">${u.nama}</span>
               </label>
             `).join('')}
           </div>
@@ -777,7 +945,7 @@ function renderSetupView() {
       </div>
     </section>
 
-    <!-- 2. USER MANAGEMENT (WITH FULL EDIT USER FORM) -->
+    <!-- 2. USER MANAGEMENT -->
     <section class="bg-white p-7 rounded-[24px] border border-slate-200/70 ui-card-shadow space-y-4">
       <h3 class="text-xs font-bold uppercase text-slate-700">2. Tambah & Kelola User Sistem</h3>
       <div class="grid grid-cols-1 sm:grid-cols-3 gap-3">
@@ -800,9 +968,12 @@ function renderSetupView() {
                 const isInactive = u.status === 'INACTIVE';
                 return `
                   <div class="p-3.5 bg-slate-50 border border-slate-200/80 rounded-2xl text-xs flex flex-wrap sm:flex-nowrap items-center justify-between gap-3 ${isInactive ? 'opacity-60' : ''}">
-                    <div class="min-w-0 flex-1">
-                      <p class="font-bold text-slate-900 truncate">${u.nama} <span class="text-[9px] px-2 py-0.5 bg-blue-100 text-blue-700 rounded-full font-bold ml-1">${u.role}</span> ${isInactive ? '<span class="text-[9px] px-2 py-0.5 bg-rose-100 text-rose-700 rounded-full font-bold">INACTIVE</span>' : ''}</p>
-                      <p class="text-[10px] text-slate-400 truncate mt-0.5">${u.email}</p>
+                    <div class="flex items-center gap-3 min-w-0 flex-1">
+                      ${getUserAvatarHTML(u.email, 'w-9 h-9 text-xs')}
+                      <div class="min-w-0 flex-1">
+                        <p class="font-bold text-slate-900 truncate">${u.nama} <span class="text-[9px] px-2 py-0.5 bg-blue-100 text-blue-700 rounded-full font-bold ml-1">${u.role}</span> ${isInactive ? '<span class="text-[9px] px-2 py-0.5 bg-rose-100 text-rose-700 rounded-full font-bold">INACTIVE</span>' : ''}</p>
+                        <p class="text-[10px] text-slate-400 truncate mt-0.5">${u.email}</p>
+                      </div>
                     </div>
                     <div class="flex items-center gap-1.5 shrink-0">
                       <button onclick="openEditUserModalSPA('${u.id}')" class="px-2.5 py-1 bg-white border border-slate-300 hover:bg-slate-100 text-slate-700 rounded-lg text-[10px] font-bold">Edit Full</button>
@@ -816,7 +987,7 @@ function renderSetupView() {
       </div>
     </section>
 
-    <!-- 3. KATEGORI EXPENSE MANAGEMENT -->
+    <!-- 3. KATEGORI EXPENSE -->
     <section class="bg-white p-7 rounded-[24px] border border-slate-200/70 ui-card-shadow space-y-4">
       <h3 class="text-xs font-bold uppercase text-slate-700">3. Kelola Kategori Expense</h3>
       <div class="flex gap-3">
@@ -848,9 +1019,7 @@ function renderSetupView() {
   `;
 }
 
-// -------------------------------------------------------------
-// TRIP CREATION & ASSIGNMENT HANDLERS
-// -------------------------------------------------------------
+// SETUP HANDLERS
 async function handleCreateTripSPA() {
   const judul = document.getElementById('newTripTitle').value.trim();
   if (!judul) return showToast('Masukkan judul trip!', 'warning');
@@ -872,7 +1041,6 @@ async function handleCreateTripSPA() {
   renderSetupView();
 }
 
-// MODAL EDIT ANGGOTA TER-ASSIGN KE TRIP
 function openAssignUsersModalSPA(tripId) {
   const trip = appData.trips.find(t => t.id === tripId);
   if (!trip) return;
@@ -888,9 +1056,10 @@ function openAssignUsersModalSPA(tripId) {
   container.innerHTML = `
     <div class="grid grid-cols-1 sm:grid-cols-2 gap-2 max-h-56 overflow-y-auto p-1 custom-scrollbar">
       ${activeUsers.map(u => `
-        <label class="flex items-center p-2 bg-slate-50 border border-slate-200 rounded-xl cursor-pointer">
+        <label class="flex items-center p-2 bg-slate-50 border border-slate-200 rounded-xl cursor-pointer gap-2">
           <input type="checkbox" value="${u.email}" ${currentAssigned.includes(u.email) ? 'checked' : ''} class="trip-edit-assign-user w-4 h-4 text-blue-600 rounded">
-          <span class="ml-2 text-xs font-bold text-slate-700 truncate">${u.nama}</span>
+          ${getUserAvatarHTML(u.email, 'w-6 h-6 text-[10px]')}
+          <span class="text-xs font-bold text-slate-700 truncate">${u.nama}</span>
         </label>
       `).join('')}
     </div>
@@ -981,9 +1150,6 @@ async function handleDeleteTripSPA(id, judulTrip) {
   renderSetupView();
 }
 
-// -------------------------------------------------------------
-// USER MANAGEMENT HANDLERS (FULL EDIT USER FORM)
-// -------------------------------------------------------------
 async function handleAddUserSPA() {
   const nama = document.getElementById('newUserName').value.trim();
   const email = document.getElementById('newUserEmail').value.trim().toLowerCase();
@@ -1000,7 +1166,6 @@ async function handleAddUserSPA() {
   renderSetupView();
 }
 
-// MODAL EDIT FULL DATA USER (NAMA, EMAIL, ROLE, STATUS)
 function openEditUserModalSPA(userId) {
   const targetUser = appData.users.find(u => u.id === userId);
   if (!targetUser) return;
@@ -1101,9 +1266,6 @@ async function handleDeleteUserSPA(id, emailUser) {
   renderSetupView();
 }
 
-// -------------------------------------------------------------
-// CATEGORY HANDLERS
-// -------------------------------------------------------------
 async function handleAddCategorySPA() {
   const nama = document.getElementById('newCategoryName').value.trim();
   if (!nama) return showToast('Masukkan nama kategori!', 'warning');
