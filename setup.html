@@ -1,0 +1,114 @@
+<!DOCTYPE html>
+<html lang="id">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Master Setup - Expense Tracker</title>
+  <script src="https://cdn.tailwindcss.com"></script>
+  <link href="https://cdn.jsdelivr.net/npm/remixicon@3.5.0/fonts/remixicon.css" rel="stylesheet">
+  <link rel="stylesheet" href="assets/css/style.css">
+  <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
+</head>
+<body class="bg-slate-100 flex min-h-screen font-sans">
+
+  <!-- SIDEBAR CONTAINER -->
+  <div id="sidebarContainer"></div>
+
+  <!-- MAIN CONTENT -->
+  <main class="flex-1 p-8 space-y-6 overflow-y-auto">
+    <div class="border-b pb-4 border-slate-200">
+      <h2 class="text-2xl font-extrabold text-amber-700">Master Setup (Khusus Admin)</h2>
+      <p class="text-xs text-slate-500">Kelola Trip baru, Tambah User, dan Kategori Pengeluaran.</p>
+    </div>
+
+    <!-- 1. TRIP SETUP -->
+    <section class="bg-white p-6 rounded-3xl shadow-sm border border-slate-200 space-y-3">
+      <h3 class="text-xs font-bold uppercase text-slate-800 tracking-wider">1. Buat Judul Trip Baru</h3>
+      <div class="flex gap-2">
+        <input type="text" id="newTripTitle" placeholder="Misal: Outing Bali 2026" class="flex-1 px-3 py-2 text-xs border border-slate-300 rounded-xl focus:outline-none">
+        <button onclick="handleCreateTrip()" class="px-4 py-2 bg-amber-600 hover:bg-amber-700 text-white font-bold text-xs rounded-xl">Buat Trip</button>
+      </div>
+      <div id="adminTripList" class="space-y-1.5 pt-2"></div>
+    </section>
+
+    <!-- 2. USER SETUP -->
+    <section class="bg-white p-6 rounded-3xl shadow-sm border border-slate-200 space-y-3">
+      <h3 class="text-xs font-bold uppercase text-slate-800 tracking-wider">2. Tambah Data User Sistem</h3>
+      <div class="grid grid-cols-1 sm:grid-cols-3 gap-2">
+        <input type="text" id="newUserName" placeholder="Nama Lengkap" class="px-3 py-2 text-xs border border-slate-300 rounded-xl focus:outline-none">
+        <input type="email" id="newUserEmail" placeholder="email@favehotels.com" class="px-3 py-2 text-xs border border-slate-300 rounded-xl focus:outline-none">
+        <div class="flex gap-2">
+          <select id="newUserRole" class="px-2 py-2 text-xs border border-slate-300 rounded-xl focus:outline-none bg-white">
+            <option value="USER">USER</option>
+            <option value="ADMIN">ADMIN</option>
+          </select>
+          <button onclick="handleAddUser()" class="flex-1 px-3 py-2 bg-blue-600 hover:bg-blue-700 text-white font-bold text-xs rounded-xl">+ Tambah</button>
+        </div>
+      </div>
+      <div id="adminUserList" class="grid grid-cols-1 sm:grid-cols-2 gap-2 pt-2"></div>
+    </section>
+  </main>
+
+  <script src="assets/js/supabase-client.js"></script>
+  <script src="assets/js/auth-guard.js"></script>
+  <script src="assets/js/sidebar.js"></script>
+  <script>
+    document.addEventListener('DOMContentLoaded', async () => {
+      // Proteksi Khusus Admin (adminOnly = true)
+      const user = await checkAuthAndProtect(true);
+      if (!user) return;
+
+      renderSidebar('setup');
+      await loadMasterData();
+    });
+
+    async function loadMasterData() {
+      const { data: trips } = await db.from('trips').select('*');
+      const { data: users } = await db.from('users').select('*');
+
+      document.getElementById('adminTripList').innerHTML = (trips || []).map(t => `
+        <div class="p-2.5 bg-slate-50 border rounded-xl text-xs flex justify-between items-center font-bold">
+          <span>${t.judul}</span>
+        </div>
+      `).join('');
+
+      document.getElementById('adminUserList').innerHTML = (users || []).map(u => `
+        <div class="p-2.5 bg-slate-50 border rounded-xl text-xs flex justify-between items-center">
+          <div>
+            <p class="font-bold text-slate-800">${u.nama} <span class="text-[9px] px-1 bg-indigo-100 text-indigo-700 rounded">${u.role}</span></p>
+            <p class="text-[10px] text-slate-400">${u.email}</p>
+          </div>
+        </div>
+      `).join('');
+    }
+
+    async function handleCreateTrip() {
+      const judul = document.getElementById('newTripTitle').value.trim();
+      if (!judul) return alert('Masukkan judul trip!');
+
+      await db.from('trips').insert([{ judul, created_by: currentUser.email }]);
+      await db.from('activity_logs').insert([{ user_email: currentUser.email, action: 'CREATE_TRIP', details: `Membuat trip: ${judul}` }]);
+
+      alert('Trip baru dibuat!');
+      document.getElementById('newTripTitle').value = '';
+      await loadMasterData();
+    }
+
+    async function handleAddUser() {
+      const nama = document.getElementById('newUserName').value.trim();
+      const email = document.getElementById('newUserEmail').value.trim().toLowerCase();
+      const role = document.getElementById('newUserRole').value;
+
+      if (!nama || !email) return alert('Lengkapi data user!');
+
+      await db.from('users').insert([{ nama, email, role }]);
+      await db.from('activity_logs').insert([{ user_email: currentUser.email, action: 'ADD_USER', details: `Menambahkan user: ${email} (${role})` }]);
+
+      alert('User berhasil ditambahkan!');
+      document.getElementById('newUserName').value = '';
+      document.getElementById('newUserEmail').value = '';
+      await loadMasterData();
+    }
+  </script>
+</body>
+</html>
