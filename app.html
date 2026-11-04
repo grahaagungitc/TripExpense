@@ -1,0 +1,78 @@
+<!DOCTYPE html>
+<html lang="id">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Expense Tracker - Archipelago Event</title>
+  <script src="https://cdn.tailwindcss.com"></script>
+  <link href="https://cdn.jsdelivr.net/npm/remixicon@3.5.0/fonts/remixicon.css" rel="stylesheet">
+  <link rel="stylesheet" href="assets/css/style.css">
+  <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
+</head>
+<body class="bg-[#F4F6FA] flex min-h-screen font-sans text-slate-800 antialiased overflow-hidden">
+
+  <!-- GLOBAL SKELETON LOADER SCREEN -->
+  <div id="appLoader" class="fixed inset-0 bg-slate-900/80 backdrop-blur-sm z-[100] flex flex-col items-center justify-center text-white space-y-4 transition-opacity duration-300">
+    <div class="w-12 h-12 border-4 border-blue-500 border-t-transparent rounded-full animate-spin"></div>
+    <p class="text-xs font-extrabold tracking-wider font-mono">Memuat Aplikasi...</p>
+  </div>
+
+  <!-- FIXED SIDEBAR (TIDAK PERNAH REFRESH) -->
+  <aside class="w-64 bg-blue-600 text-white h-screen flex flex-col justify-between shrink-0 p-6 shadow-2xl relative z-20">
+    <div class="space-y-8">
+      <!-- BRANDING LOGO -->
+      <div class="flex items-center space-x-3 px-2">
+        <div class="w-10 h-10 bg-white/20 backdrop-blur-md rounded-2xl flex items-center justify-center text-white text-xl font-extrabold shadow-inner">
+          <i class="ri-wallet-3-line"></i>
+        </div>
+        <div>
+          <h1 class="font-bold text-base tracking-tight leading-none text-white brand-font">ExpenseTracker</h1>
+          <p class="text-[10px] text-blue-100 font-semibold mt-1">Archipelago Event</p>
+        </div>
+      </div>
+
+      <!-- NAVIGATION MENU -->
+      <nav class="space-y-2 text-xs font-bold">
+        <button onclick="navigateTo('dashboard')" id="nav-dashboard" class="nav-btn w-full flex items-center gap-3 px-4 py-3 rounded-2xl transition-all duration-200 bg-white text-blue-600 shadow-lg shadow-black/5">
+          <i class="ri-dashboard-3-line text-lg"></i> Dashboard
+        </button>
+        <button onclick="navigateTo('expense')" id="nav-expense" class="nav-btn w-full flex items-center gap-3 px-4 py-3 rounded-2xl transition-all duration-200 text-blue-100 hover:bg-white/10 hover:text-white">
+          <i class="ri-add-circle-line text-lg"></i> Input Expense
+        </button>
+        <button onclick="navigateTo('settlement')" id="nav-settlement" class="nav-btn w-full flex items-center gap-3 px-4 py-3 rounded-2xl transition-all duration-200 text-blue-100 hover:bg-white/10 hover:text-white">
+          <i class="ri-exchange-dollar-line text-lg"></i> Split Settlement
+        </button>
+        <button onclick="navigateTo('logs')" id="nav-logs" class="nav-btn w-full flex items-center gap-3 px-4 py-3 rounded-2xl transition-all duration-200 text-blue-100 hover:bg-white/10 hover:text-white">
+          <i class="ri-history-line text-lg"></i> Activity Logs
+        </button>
+        <button onclick="navigateTo('setup')" id="nav-setup" class="nav-btn w-full flex items-center gap-3 px-4 py-3 rounded-2xl transition-all duration-200 text-amber-200 hover:bg-white/10 hover:text-white hidden">
+          <i class="ri-settings-4-line text-lg"></i> Master Setup
+        </button>
+      </nav>
+    </div>
+
+    <!-- USER PROFILE & LOGOUT -->
+    <div class="space-y-4 pt-6 border-t border-white/15">
+      <div class="flex items-center gap-3 px-2">
+        <div id="userAvatar" class="w-9 h-9 rounded-full bg-white/20 flex items-center justify-center font-black text-sm text-white shrink-0 border border-white/30">U</div>
+        <div class="truncate">
+          <p id="userDisplayName" class="text-xs font-extrabold text-white truncate leading-tight">Loading...</p>
+          <span id="userRoleBadge" class="inline-block mt-0.5 text-[9px] font-black px-2 py-0.5 rounded-full bg-white/20 text-white uppercase">USER</span>
+        </div>
+      </div>
+
+      <button onclick="doLogout()" class="w-full py-2.5 px-3 bg-white/10 hover:bg-rose-500 text-white text-xs font-bold rounded-xl transition-all flex items-center justify-center gap-2 border border-white/10">
+        <i class="ri-logout-box-r-line"></i> Keluar
+      </button>
+    </div>
+  </aside>
+
+  <!-- DYNAMIC VIEW AREA (BERUBAH TANPA REFRESH SIDEBAR) -->
+  <main id="mainContentView" class="flex-1 p-8 space-y-8 overflow-y-auto h-screen view-animate-enter">
+    <!-- View Content Injected via app-spa.js -->
+  </main>
+
+  <script src="assets/js/supabase-client.js"></script>
+  <script src="assets/js/app-spa.js"></script>
+</body>
+</html>
