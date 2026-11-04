@@ -27,10 +27,7 @@ function showToast(message, type = 'info') {
   toast.innerHTML = `<span>${message}</span>`;
   container.appendChild(toast);
 
-  setTimeout(() => {
-    toast.classList.remove('translate-y-4', 'opacity-0');
-  }, 10);
-
+  setTimeout(() => toast.classList.remove('translate-y-4', 'opacity-0'), 10);
   setTimeout(() => {
     toast.classList.add('opacity-0', 'translate-y-2');
     setTimeout(() => toast.remove(), 300);
@@ -54,28 +51,6 @@ function showCustomConfirm(title, message) {
   });
 }
 
-function showCustomPrompt(title, defaultVal = '') {
-  return new Promise((resolve) => {
-    document.getElementById('modalTitle').innerText = title;
-    document.getElementById('modalMessage').innerText = '';
-    
-    const inputContainer = document.getElementById('modalInputContainer');
-    const input = document.getElementById('modalInput');
-    inputContainer.classList.remove('hidden');
-    input.value = defaultVal;
-    
-    document.getElementById('modalBtnCancel').classList.remove('hidden');
-    
-    const confirmBtn = document.getElementById('modalBtnConfirm');
-    confirmBtn.innerText = 'Simpan';
-    confirmBtn.onclick = () => { closeCustomModal(input.value); };
-
-    modalResolver = resolve;
-    document.getElementById('customModal').classList.remove('hidden');
-    setTimeout(() => input.focus(), 100);
-  });
-}
-
 function closeCustomModal(result) {
   document.getElementById('customModal').classList.add('hidden');
   if (modalResolver) {
@@ -96,7 +71,6 @@ window.addEventListener('DOMContentLoaded', async () => {
   }
 
   const email = session.user.email ? session.user.email.toLowerCase().trim() : '';
-
   if (!email) {
     await forceLogoutAndRedirect('Format email autentikasi tidak valid.');
     return;
@@ -138,16 +112,9 @@ async function forceLogoutAndRedirect(errorMessage = null) {
   localStorage.removeItem('gh_user_session');
   currentUser = null;
 
-  try {
-    await db.auth.signOut();
-  } catch (e) {
-    console.error("Error signing out:", e);
-  }
+  try { await db.auth.signOut(); } catch (e) {}
 
-  if (errorMessage) {
-    alert(errorMessage);
-  }
-
+  if (errorMessage) alert(errorMessage);
   window.location.replace('login.html');
 }
 
@@ -182,14 +149,20 @@ async function refreshAppData() {
   appData.expenses = expenses || [];
   appData.payments = payments || [];
 
-  if (!appData.selectedTripId && appData.trips.length > 0) {
-    const activeTrips = appData.trips.filter(t => t.status !== 'INACTIVE');
-    appData.selectedTripId = activeTrips.length > 0 ? activeTrips[activeTrips.length - 1].id : appData.trips[0].id;
+  const activeTrips = appData.trips.filter(t => t.status !== 'INACTIVE');
+
+  if (activeTrips.length > 0) {
+    const isStillActive = activeTrips.some(t => t.id === appData.selectedTripId);
+    if (!isStillActive) {
+      appData.selectedTripId = activeTrips[activeTrips.length - 1].id;
+    }
+  } else {
+    appData.selectedTripId = appData.trips.length > 0 ? appData.trips[0].id : null;
   }
 }
 
 // -------------------------------------------------------------
-// CLIENT-SIDE SEAMLESS ROUTER
+// CLIENT-SIDE ROUTER
 // -------------------------------------------------------------
 function navigateTo(viewName) {
   if (viewName === 'setup' && currentUser.role !== 'ADMIN') {
@@ -218,28 +191,53 @@ function navigateTo(viewName) {
   if (viewName === 'dashboard') renderDashboardView();
   else if (viewName === 'expense') renderExpenseView();
   else if (viewName === 'settlement') renderSettlementView();
+  else if (viewName === 'history') renderHistoryView();
   else if (viewName === 'logs') renderLogsView();
   else if (viewName === 'setup') renderSetupView();
 }
 
+function renderGlobalTripSelectorHTML() {
+  const activeTrips = appData.trips.filter(t => t.status !== 'INACTIVE');
+  if (activeTrips.length === 0) return `<p class="text-xs text-rose-500 font-bold">Tidak ada Event Aktif</p>`;
+
+  return `
+    <div class="flex items-center gap-2 bg-white px-3 py-1.5 rounded-2xl border border-slate-200 shadow-sm">
+      <i class="ri-map-pin-line text-blue-600 text-sm"></i>
+      <span class="text-xs font-bold text-slate-500">Trip Aktif:</span>
+      <select onchange="onGlobalTripChange(this.value)" class="bg-transparent text-xs font-extrabold text-blue-600 focus:outline-none cursor-pointer">
+        ${activeTrips.map(t => `<option value="${t.id}" ${appData.selectedTripId === t.id ? 'selected' : ''}>${t.judul}</option>`).join('')}
+      </select>
+    </div>
+  `;
+}
+
+function onGlobalTripChange(tripId) {
+  appData.selectedTripId = tripId;
+  navigateTo(currentView);
+}
+
 // -------------------------------------------------------------
-// 1. DASHBOARD VIEW (DICOCOKKAN DENGAN NAMA & RE-KALKULASI UTANG/PIUTANG)
+// 1. DASHBOARD VIEW
 // -------------------------------------------------------------
 function renderDashboardView() {
-  const selectedTrip = appData.trips.find(t => t.id === appData.selectedTripId) || appData.trips[0];
+  const selectedTrip = appData.trips.find(t => t.id === appData.selectedTripId);
   const tripExpenses = appData.expenses.filter(e => selectedTrip && e.trip_id === selectedTrip.id);
   
   const totalEventNominal = tripExpenses.reduce((sum, e) => sum + parseFloat(e.nominal || 0), 0);
-  const activeParticipantsCount = (selectedTrip && selectedTrip.active_participant_emails) ? selectedTrip.active_participant_emails.length : appData.users.filter(u => u.status !== 'INACTIVE').length;
+  
+  // Ambil peserta terpilih dari Trip
+  const assignedTripEmails = (selectedTrip && selectedTrip.active_participant_emails && selectedTrip.active_participant_emails.length > 0)
+    ? selectedTrip.active_participant_emails
+    : appData.users.filter(u => u.status !== 'INACTIVE').map(u => u.email);
+
+  const activeParticipantsCount = assignedTripEmails.length;
   const avgPerPerson = activeParticipantsCount > 0 ? (totalEventNominal / activeParticipantsCount) : 0;
 
   let totalPiutang = 0;
   let totalUtang = 0;
   let breakdownMap = {};
-
   const myEmail = currentUser.email.toLowerCase().trim();
 
-  // Kalkulasi Utang Piutang per Trip Aktif
   tripExpenses.forEach(exp => {
     const pesertaList = exp.peserta_emails || [];
     if (!pesertaList.length) return;
@@ -278,52 +276,46 @@ function renderDashboardView() {
     <div class="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
       <div>
         <h2 class="text-2xl font-black tracking-tight text-slate-900 brand-font">Dashboard Overview</h2>
-        <p class="text-xs font-extrabold text-slate-400 mt-0.5">Ringkasan kewajiban & statistik event aktif</p>
+        <p class="text-xs font-extrabold text-slate-400 mt-0.5">Ringkasan transaksi trip "${selectedTrip ? selectedTrip.judul : 'Tidak Ada Trip'}"</p>
       </div>
-
-      <div class="flex items-center gap-3">
-        <label class="text-xs font-bold text-slate-500">Pilih Event:</label>
-        <select onchange="onDashboardTripChange(this.value)" class="px-4 py-2 bg-white border border-slate-200 rounded-2xl text-xs font-extrabold text-blue-600 shadow-sm focus:outline-none">
-          ${appData.trips.map(t => `<option value="${t.id}" ${selectedTrip && selectedTrip.id === t.id ? 'selected' : ''}>${t.judul} ${t.status === 'INACTIVE' ? '(Nonaktif)' : ''}</option>`).join('')}
-        </select>
-      </div>
+      <div>${renderGlobalTripSelectorHTML()}</div>
     </div>
 
     <div class="grid grid-cols-1 md:grid-cols-4 gap-5">
       <div class="bg-blue-600 text-white p-6 rounded-[24px] ui-card-shadow space-y-2">
         <span class="text-[10px] font-extrabold uppercase tracking-wider text-blue-200">Total Piutang Saya</span>
         <p class="text-3xl font-black">${'Rp ' + Math.round(totalPiutang).toLocaleString('id-ID')}</p>
-        <p class="text-[11px] text-blue-100 font-semibold">Hak tagihan Anda ke peserta lain</p>
+        <p class="text-[11px] text-blue-100 font-semibold">Hak tagihan Anda pada trip ini</p>
       </div>
 
       <div class="bg-white p-6 rounded-[24px] border border-slate-200/70 ui-card-shadow space-y-2">
         <span class="text-[10px] font-extrabold uppercase tracking-wider text-slate-400">Total Utang Saya</span>
         <p class="text-3xl font-black text-rose-600">${'Rp ' + Math.round(totalUtang).toLocaleString('id-ID')}</p>
-        <p class="text-[11px] text-slate-400 font-semibold">Kewajiban bayar yang belum lunas</p>
+        <p class="text-[11px] text-slate-400 font-semibold">Kewajiban bayar pada trip ini</p>
       </div>
 
       <div class="bg-white p-6 rounded-[24px] border border-slate-200/70 ui-card-shadow space-y-2">
-        <span class="text-[10px] font-extrabold uppercase tracking-wider text-slate-400">Total Pengeluaran Event</span>
+        <span class="text-[10px] font-extrabold uppercase tracking-wider text-slate-400">Total Pengeluaran Trip</span>
         <p class="text-3xl font-black text-slate-900">${'Rp ' + Math.round(totalEventNominal).toLocaleString('id-ID')}</p>
-        <p class="text-[11px] text-slate-400 font-semibold">${tripExpenses.length} transaksi di event ini</p>
+        <p class="text-[11px] text-slate-400 font-semibold">${tripExpenses.length} transaksi di trip ini</p>
       </div>
 
       <div class="bg-white p-6 rounded-[24px] border border-slate-200/70 ui-card-shadow space-y-2">
         <span class="text-[10px] font-extrabold uppercase tracking-wider text-slate-400">Estimasi Rata-rata / Orang</span>
         <p class="text-3xl font-black text-emerald-600">${'Rp ' + Math.round(avgPerPerson).toLocaleString('id-ID')}</p>
-        <p class="text-[11px] text-slate-400 font-semibold">${activeParticipantsCount} Anggota aktif</p>
+        <p class="text-[11px] text-slate-400 font-semibold">${activeParticipantsCount} Anggota Terdaftar Trip</p>
       </div>
     </div>
 
     <div class="grid grid-cols-1 lg:grid-cols-3 gap-6">
       <div class="lg:col-span-2 bg-white p-6 rounded-[24px] border border-slate-200/70 ui-card-shadow space-y-4">
         <div class="flex items-center justify-between border-b border-slate-100 pb-3">
-          <h3 class="font-extrabold text-slate-900 text-sm brand-font">Rincian Tagihan Per Anggota</h3>
+          <h3 class="font-extrabold text-slate-900 text-sm brand-font">Rincian Tagihan Per Anggota (Trip Ini)</h3>
           <span class="text-[11px] font-bold text-slate-400">Status Terbaru</span>
         </div>
         <div class="divide-y divide-slate-100">
           ${Object.keys(breakdownMap).length === 0 
-            ? `<p class="py-6 text-center text-xs text-slate-400 font-semibold">Tidak ada utang atau piutang aktif saat ini.</p>`
+            ? `<p class="py-6 text-center text-xs text-slate-400 font-semibold">Tidak ada utang atau piutang aktif pada trip ini.</p>`
             : Object.keys(breakdownMap).map(email => {
                 const item = breakdownMap[email];
                 const selisih = Math.round(item.piutang - item.utang);
@@ -378,34 +370,33 @@ function renderDashboardView() {
   document.getElementById('mainContentView').innerHTML = html;
 }
 
-function onDashboardTripChange(tripId) {
-  appData.selectedTripId = tripId;
-  renderDashboardView();
-}
-
 // -------------------------------------------------------------
-// 2. INPUT EXPENSE VIEW
+// 2. INPUT EXPENSE VIEW (HANYA MENAMPILKAN USER TER-ASSIGN KE TRIP)
 // -------------------------------------------------------------
 function renderExpenseView() {
-  const activeTrips = appData.trips.filter(t => t.status !== 'INACTIVE');
-  const activeUsers = appData.users.filter(u => u.status !== 'INACTIVE');
+  const selectedTrip = appData.trips.find(t => t.id === appData.selectedTripId);
   const activeCategories = appData.categories.filter(c => c.status !== 'INACTIVE');
+  
+  // Filter User yang aktif & ter-assign ke trip ini
+  const assignedTripEmails = (selectedTrip && selectedTrip.active_participant_emails && selectedTrip.active_participant_emails.length > 0)
+    ? selectedTrip.active_participant_emails
+    : appData.users.filter(u => u.status !== 'INACTIVE').map(u => u.email);
+
+  const eligibleUsers = appData.users.filter(u => u.status !== 'INACTIVE' && assignedTripEmails.includes(u.email));
+  const scopedExpenses = appData.expenses.filter(e => selectedTrip && e.trip_id === selectedTrip.id);
 
   const html = `
-    <div class="border-b border-slate-200/80 pb-4">
-      <h2 class="text-2xl font-black text-slate-900 brand-font">Input Expense Baru</h2>
-      <p class="text-xs text-slate-400 mt-0.5">Catat item transaksi baru beserta pembayar dan anggotanya</p>
+    <div class="flex flex-col sm:flex-row sm:items-center justify-between gap-4 border-b border-slate-200/80 pb-4">
+      <div>
+        <h2 class="text-2xl font-black text-slate-900 brand-font">Input Expense Baru</h2>
+        <p class="text-xs text-slate-400 mt-0.5">Menambahkan transaksi untuk trip: <strong>${selectedTrip ? selectedTrip.judul : 'Pilih Trip'}</strong></p>
+      </div>
+      <div>${renderGlobalTripSelectorHTML()}</div>
     </div>
 
     <section class="bg-white p-7 rounded-[24px] border border-slate-200/70 ui-card-shadow space-y-5">
       <form onsubmit="handleExpenseSubmitSPA(event)" class="space-y-4">
         <div class="grid grid-cols-1 md:grid-cols-2 gap-4">
-          <div class="space-y-1">
-            <label class="text-xs font-bold text-slate-700 uppercase">Judul Trip / Event</label>
-            <select id="expTripSelect" onchange="onTripSelectChangeSPA(this.value)" required class="w-full px-4 py-2.5 text-xs border border-slate-200 rounded-xl font-bold text-blue-600 bg-slate-50 focus:outline-none">
-              ${activeTrips.map(t => `<option value="${t.id}" ${appData.selectedTripId === t.id ? 'selected' : ''}>${t.judul}</option>`).join('')}
-            </select>
-          </div>
           <div class="space-y-1">
             <label class="text-xs font-bold text-slate-700 uppercase">Kategori Expense</label>
             <select id="expKategoriSelect" required class="w-full px-4 py-2.5 text-xs border border-slate-200 rounded-xl font-semibold text-slate-700 bg-slate-50 focus:outline-none">
@@ -414,24 +405,23 @@ function renderExpenseView() {
                 : `<option value="Umum">Umum</option>`}
             </select>
           </div>
-        </div>
-
-        <div class="grid grid-cols-1 md:grid-cols-3 gap-4">
-          <div class="md:col-span-2 space-y-1">
+          <div class="space-y-1">
             <label class="text-xs font-bold text-slate-700 uppercase">Nama Item / Pengeluaran</label>
             <input type="text" id="expNamaItem" required placeholder="Misal: Bensin, Dinner, Tiket Masuk" class="w-full px-4 py-2.5 text-xs border border-slate-200 rounded-xl bg-slate-50 focus:outline-none font-bold">
           </div>
+        </div>
+
+        <div class="grid grid-cols-1 md:grid-cols-3 gap-4">
           <div class="space-y-1">
             <label class="text-xs font-bold text-slate-700 uppercase">Total Nominal (Rp)</label>
             <input type="number" id="expNominal" required placeholder="500000" class="w-full px-4 py-2.5 text-xs border border-slate-200 rounded-xl font-black text-slate-900 bg-slate-50 focus:outline-none">
           </div>
-        </div>
-
-        <div class="grid grid-cols-1 md:grid-cols-2 gap-4">
           <div class="space-y-1">
             <label class="text-xs font-bold text-slate-700 uppercase">Pembayar Awal:</label>
             <select id="expPembayarSelect" required class="w-full px-4 py-2.5 text-xs border border-slate-200 rounded-xl font-bold text-blue-600 bg-slate-50 focus:outline-none">
-              ${activeUsers.map(u => `<option value="${u.email}" ${u.email.toLowerCase() === currentUser.email.toLowerCase() ? 'selected' : ''}>${u.nama} (${u.email})</option>`).join('')}
+              ${eligibleUsers.length > 0 
+                ? eligibleUsers.map(u => `<option value="${u.email}" ${u.email.toLowerCase() === currentUser.email.toLowerCase() ? 'selected' : ''}>${u.nama} (${u.email})</option>`).join('')
+                : `<option value="">Belum ada peserta di-assign ke trip ini</option>`}
             </select>
           </div>
           <div class="space-y-1">
@@ -441,25 +431,34 @@ function renderExpenseView() {
         </div>
 
         <div class="space-y-2 pt-2 border-t border-slate-100">
-          <label class="text-xs font-bold text-slate-700 uppercase">Anggota Yang Menanggung Tagihan Ini:</label>
-          <div id="expPesertaChecklistContainer" class="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 gap-2"></div>
+          <label class="text-xs font-bold text-slate-700 uppercase">Anggota Yang Menanggung Tagihan Ini (Anggota Trip Terdaftar):</label>
+          <div id="expPesertaChecklistContainer" class="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 gap-2">
+            ${eligibleUsers.length === 0 
+              ? `<p class="text-xs text-slate-400 italic col-span-4">Belum ada anggota yang di-assign ke trip ini. Buka Master Setup untuk assign anggota.</p>`
+              : eligibleUsers.map(u => `
+                  <label class="flex items-center p-2.5 bg-slate-50 border border-slate-200/70 rounded-xl cursor-pointer">
+                    <input type="checkbox" value="${u.email}" checked class="exp-chk-peserta w-4 h-4 text-blue-600 rounded">
+                    <span class="ml-2 text-xs font-bold text-slate-700 truncate">${u.nama}</span>
+                  </label>
+                `).join('')}
+          </div>
         </div>
 
         <button type="submit" id="btnSaveExpense" class="w-full py-3 bg-blue-600 hover:bg-blue-700 text-white font-bold text-xs rounded-xl shadow-lg transition flex items-center justify-center gap-2">
-          <i class="ri-save-line text-sm"></i> Simpan Sub-Expense
+          <i class="ri-save-line text-sm"></i> Simpan Sub-Expense ke Trip Ini
         </button>
       </form>
     </section>
 
     <section class="bg-white p-7 rounded-[24px] border border-slate-200/70 ui-card-shadow space-y-4">
       <div class="flex items-center justify-between border-b border-slate-100 pb-3">
-        <h3 class="font-extrabold text-slate-900 text-sm brand-font">Log Transaksi Pengeluaran</h3>
-        <span class="px-3 py-1 bg-blue-50 text-blue-600 rounded-full font-black text-xs">${appData.expenses.length} Transaksi</span>
+        <h3 class="font-extrabold text-slate-900 text-sm brand-font">Log Transaksi: ${selectedTrip ? selectedTrip.judul : ''}</h3>
+        <span class="px-3 py-1 bg-blue-50 text-blue-600 rounded-full font-black text-xs">${scopedExpenses.length} Transaksi</span>
       </div>
       <div class="divide-y divide-slate-100">
-        ${appData.expenses.length === 0
-          ? `<p class="py-4 text-center text-xs text-slate-400 font-semibold">Belum ada riwayat transaksi.</p>`
-          : appData.expenses.map(e => `
+        ${scopedExpenses.length === 0
+          ? `<p class="py-4 text-center text-xs text-slate-400 font-semibold">Belum ada transaksi dicatat untuk trip ini.</p>`
+          : scopedExpenses.map(e => `
               <div class="py-3 flex items-center justify-between text-xs">
                 <div>
                   <span class="px-2 py-0.5 bg-blue-50 text-blue-600 rounded-full font-black text-[10px]">${e.kategori || 'Umum'}</span>
@@ -477,25 +476,6 @@ function renderExpenseView() {
   `;
 
   document.getElementById('mainContentView').innerHTML = html;
-  const expTripSelect = document.getElementById('expTripSelect');
-  if (expTripSelect && expTripSelect.value) {
-    onTripSelectChangeSPA(expTripSelect.value);
-  }
-}
-
-function onTripSelectChangeSPA(tripId) {
-  const targetTrip = appData.trips.find(t => t.id === tripId);
-  const activeEmails = targetTrip ? (targetTrip.active_participant_emails || []) : [];
-  const activeUsers = appData.users.filter(u => u.status !== 'INACTIVE');
-  
-  const eligibleUsers = activeEmails.length > 0 ? activeUsers.filter(u => activeEmails.includes(u.email)) : activeUsers;
-
-  document.getElementById('expPesertaChecklistContainer').innerHTML = eligibleUsers.map(u => `
-    <label class="flex items-center p-2.5 bg-slate-50 border border-slate-200/70 rounded-xl cursor-pointer">
-      <input type="checkbox" value="${u.email}" checked class="exp-chk-peserta w-4 h-4 text-blue-600 rounded">
-      <span class="ml-2 text-xs font-bold text-slate-700 truncate">${u.nama}</span>
-    </label>
-  `).join('');
 }
 
 async function handleExpenseSubmitSPA(e) {
@@ -504,7 +484,9 @@ async function handleExpenseSubmitSPA(e) {
   const selectedPeserta = Array.from(document.querySelectorAll('.exp-chk-peserta:checked')).map(c => c.value);
   if (!selectedPeserta.length) return showToast('Pilih minimal 1 peserta!', 'warning');
 
-  const tripId = btn('expTripSelect').value;
+  const tripId = appData.selectedTripId;
+  if (!tripId) return showToast('Pilih trip aktif terlebih dahulu!', 'warning');
+
   const kategori = btn('expKategoriSelect').value;
   const item = btn('expNamaItem').value;
   const nominal = parseFloat(btn('expNominal').value);
@@ -538,73 +520,74 @@ async function handleExpenseSubmitSPA(e) {
 }
 
 // -------------------------------------------------------------
-// 3. SETTLEMENT VIEW (MENAMPILKAN NAMA ANGGOTA BUKAN EMAIL)
+// 3. SETTLEMENT VIEW
 // -------------------------------------------------------------
 function renderSettlementView() {
-  const containerHtml = appData.trips.map(trip => {
-    const tripExpenses = appData.expenses.filter(e => e.trip_id === trip.id);
-    let summaryMap = {};
-
-    tripExpenses.forEach(exp => {
-      const perOrang = exp.nominal / (exp.peserta_emails.length || 1);
-      exp.peserta_emails.forEach(pEmail => {
-        if (pEmail.toLowerCase() !== exp.pembayar_email.toLowerCase()) {
-          const pairKey = `${pEmail.toLowerCase()}->${exp.pembayar_email.toLowerCase()}`;
-          if (!summaryMap[pairKey]) {
-            summaryMap[pairKey] = { dariEmail: pEmail, keEmail: exp.pembayar_email, totalNominal: 0 };
-          }
-          summaryMap[pairKey].totalNominal += perOrang;
+  const selectedTrip = appData.trips.find(t => t.id === appData.selectedTripId);
+  const tripExpenses = appData.expenses.filter(e => selectedTrip && e.trip_id === selectedTrip.id);
+  
+  let summaryMap = {};
+  tripExpenses.forEach(exp => {
+    const perOrang = exp.nominal / (exp.peserta_emails.length || 1);
+    exp.peserta_emails.forEach(pEmail => {
+      if (pEmail.toLowerCase() !== exp.pembayar_email.toLowerCase()) {
+        const pairKey = `${pEmail.toLowerCase()}->${exp.pembayar_email.toLowerCase()}`;
+        if (!summaryMap[pairKey]) {
+          summaryMap[pairKey] = { dariEmail: pEmail, keEmail: exp.pembayar_email, totalNominal: 0 };
         }
-      });
+        summaryMap[pairKey].totalNominal += perOrang;
+      }
     });
+  });
 
-    return `
-      <div class="bg-white p-7 rounded-[24px] border border-slate-200/70 ui-card-shadow space-y-4">
-        <div class="flex items-center justify-between border-b border-slate-100 pb-3">
-          <h3 class="font-extrabold text-slate-900 text-sm brand-font">${trip.judul} ${trip.status === 'INACTIVE' ? '<span class="text-[10px] text-rose-500 font-bold ml-1">(Nonaktif)</span>' : ''}</h3>
-          <span class="text-xs font-bold text-slate-400">${tripExpenses.length} Sub-Expense</span>
-        </div>
-        <div class="grid grid-cols-1 md:grid-cols-2 gap-4">
-          ${Object.values(summaryMap).map(s => {
-            const dariNama = getUserNameByEmail(s.dariEmail);
-            const keNama = getUserNameByEmail(s.keEmail);
-            const isPengutang = currentUser.email.toLowerCase() === s.dariEmail.toLowerCase();
-            const isPembayar = currentUser.email.toLowerCase() === s.keEmail.toLowerCase();
-            const isAdmin = currentUser.role === 'ADMIN';
+  const cardsHtml = Object.values(summaryMap).length === 0
+    ? `<div class="bg-white p-8 rounded-[24px] text-center text-xs text-slate-400 font-bold border border-slate-200/70">Tidak ada utang/piutang gantung pada trip "${selectedTrip ? selectedTrip.judul : ''}".</div>`
+    : Object.values(summaryMap).map(s => {
+        const dariNama = getUserNameByEmail(s.dariEmail);
+        const keNama = getUserNameByEmail(s.keEmail);
+        const isPengutang = currentUser.email.toLowerCase() === s.dariEmail.toLowerCase();
+        const isPembayar = currentUser.email.toLowerCase() === s.keEmail.toLowerCase();
+        const isAdmin = currentUser.role === 'ADMIN';
 
-            return `
-              <div class="p-4 bg-slate-50 border border-slate-200/70 rounded-2xl space-y-3 text-xs">
-                <div class="flex items-center justify-between font-black text-slate-900">
-                  <span>${dariNama} ➔ ${keNama}</span>
-                  <span class="text-blue-600">Rp ${Math.round(s.totalNominal).toLocaleString('id-ID')}</span>
-                </div>
-                <div class="flex items-center justify-between pt-2 border-t border-slate-200/70">
-                  ${(isPengutang || isAdmin) ? `
-                    <label class="cursor-pointer text-[10px] bg-white border border-blue-300 text-blue-600 px-3 py-1 rounded-full font-bold shadow-sm">
-                      Upload Bukti TF
-                      <input type="file" accept="image/*,application/pdf" class="hidden" onchange="uploadBulkProofSPA(event, '${trip.id}', '${s.dariEmail}', '${s.keEmail}')">
-                    </label>
-                  ` : ''}
-                  ${(isPembayar || isAdmin) ? `
-                    <button onclick="approveSettlementSPA('${trip.id}', '${s.dariEmail}', '${s.keEmail}')" class="text-[10px] bg-emerald-600 text-white px-3 py-1 rounded-full font-bold shadow-md">
-                      Approve Lunas
-                    </button>
-                  ` : ''}
-                </div>
-              </div>
-            `;
-          }).join('')}
-        </div>
-      </div>
-    `;
-  }).join('');
+        return `
+          <div class="p-4 bg-slate-50 border border-slate-200/70 rounded-2xl space-y-3 text-xs">
+            <div class="flex items-center justify-between font-black text-slate-900">
+              <span>${dariNama} ➔ ${keNama}</span>
+              <span class="text-blue-600">Rp ${Math.round(s.totalNominal).toLocaleString('id-ID')}</span>
+            </div>
+            <div class="flex items-center justify-between pt-2 border-t border-slate-200/70">
+              ${(isPengutang || isAdmin) ? `
+                <label class="cursor-pointer text-[10px] bg-white border border-blue-300 text-blue-600 px-3 py-1 rounded-full font-bold shadow-sm">
+                  Upload Bukti TF
+                  <input type="file" accept="image/*,application/pdf" class="hidden" onchange="uploadBulkProofSPA(event, '${selectedTrip.id}', '${s.dariEmail}', '${s.keEmail}')">
+                </label>
+              ` : ''}
+              ${(isPembayar || isAdmin) ? `
+                <button onclick="approveSettlementSPA('${selectedTrip.id}', '${s.dariEmail}', '${s.keEmail}')" class="text-[10px] bg-emerald-600 text-white px-3 py-1 rounded-full font-bold shadow-md">
+                  Approve Lunas
+                </button>
+              ` : ''}
+            </div>
+          </div>
+        `;
+      }).join('');
 
   document.getElementById('mainContentView').innerHTML = `
-    <div class="border-b border-slate-200/80 pb-4">
-      <h2 class="text-2xl font-black text-slate-900 brand-font">Split & Settlement</h2>
-      <p class="text-xs text-slate-400 mt-0.5">Kelola konfirmasi pelunasan antar anggota</p>
+    <div class="flex flex-col sm:flex-row sm:items-center justify-between gap-4 border-b border-slate-200/80 pb-4">
+      <div>
+        <h2 class="text-2xl font-black text-slate-900 brand-font">Split & Settlement</h2>
+        <p class="text-xs text-slate-400 mt-0.5">Pelunasan untuk trip: <strong>${selectedTrip ? selectedTrip.judul : 'Pilih Trip'}</strong></p>
+      </div>
+      <div>${renderGlobalTripSelectorHTML()}</div>
     </div>
-    <div class="space-y-6">${containerHtml}</div>
+
+    <div class="bg-white p-7 rounded-[24px] border border-slate-200/70 ui-card-shadow space-y-4">
+      <div class="flex items-center justify-between border-b border-slate-100 pb-3">
+        <h3 class="font-extrabold text-slate-900 text-sm brand-font">${selectedTrip ? selectedTrip.judul : ''}</h3>
+        <span class="text-xs font-bold text-slate-400">${tripExpenses.length} Sub-Expense</span>
+      </div>
+      <div class="grid grid-cols-1 md:grid-cols-2 gap-4">${cardsHtml}</div>
+    </div>
   `;
 }
 
@@ -638,7 +621,70 @@ async function approveSettlementSPA(tripId, dariEmail, keEmail) {
 }
 
 // -------------------------------------------------------------
-// 4. ACTIVITY LOGS VIEW
+// 4. HISTORY TRIP VIEW
+// -------------------------------------------------------------
+function renderHistoryView() {
+  const allTrips = appData.trips;
+
+  const html = `
+    <div class="border-b border-slate-200/80 pb-4">
+      <h2 class="text-2xl font-black text-slate-900 brand-font">History Trip & Arsip</h2>
+      <p class="text-xs text-slate-400 mt-0.5">Daftar seluruh trip yang pernah dibuat beserta trip yang sudah di-nonaktifkan</p>
+    </div>
+
+    <div class="space-y-6">
+      ${allTrips.length === 0
+        ? `<p class="p-8 text-center text-xs text-slate-400 font-bold bg-white rounded-[24px]">Belum ada data trip di sistem.</p>`
+        : allTrips.map(trip => {
+            const isInactive = trip.status === 'INACTIVE';
+            const tripExpenses = appData.expenses.filter(e => e.trip_id === trip.id);
+            const totalNominal = tripExpenses.reduce((sum, e) => sum + parseFloat(e.nominal || 0), 0);
+
+            return `
+              <div class="bg-white p-7 rounded-[24px] border border-slate-200/70 ui-card-shadow space-y-4 ${isInactive ? 'opacity-85 bg-slate-50/50' : ''}">
+                <div class="flex flex-col sm:flex-row sm:items-center justify-between gap-2 border-b border-slate-100 pb-3">
+                  <div>
+                    <h3 class="font-extrabold text-slate-900 text-base brand-font flex items-center gap-2">
+                      ${trip.judul}
+                      ${isInactive 
+                        ? `<span class="px-2.5 py-0.5 bg-rose-100 text-rose-700 rounded-full text-[10px] font-black">INACTIVE / SELESAI</span>` 
+                        : `<span class="px-2.5 py-0.5 bg-emerald-100 text-emerald-700 rounded-full text-[10px] font-black">AKTIF</span>`}
+                    </h3>
+                    <p class="text-[11px] text-slate-400 font-semibold mt-0.5">Dibuat oleh: ${getUserNameByEmail(trip.created_by)}</p>
+                  </div>
+                  <div class="text-right">
+                    <span class="text-xs font-bold text-slate-400">Total Pengeluaran:</span>
+                    <p class="text-lg font-black text-blue-600">Rp ${Math.round(totalNominal).toLocaleString('id-ID')}</p>
+                  </div>
+                </div>
+
+                <div class="space-y-2">
+                  <p class="text-xs font-bold text-slate-700 uppercase tracking-wider">Riwayat Sub-Expense (${tripExpenses.length}):</p>
+                  <div class="divide-y divide-slate-100 max-h-48 overflow-y-auto custom-scrollbar">
+                    ${tripExpenses.length === 0
+                      ? `<p class="py-2 text-xs text-slate-400 italic">Tidak ada transaksi.</p>`
+                      : tripExpenses.map(e => `
+                          <div class="py-2 flex justify-between items-center text-xs">
+                            <div>
+                              <span class="font-bold text-slate-800">${e.nama_item}</span>
+                              <span class="text-[10px] text-slate-400">(${e.kategori || 'Umum'}) - Dibayar: ${getUserNameByEmail(e.pembayar_email)}</span>
+                            </div>
+                            <span class="font-black text-slate-900">Rp ${parseFloat(e.nominal).toLocaleString('id-ID')}</span>
+                          </div>
+                        `).join('')}
+                  </div>
+                </div>
+              </div>
+            `;
+          }).join('')}
+    </div>
+  `;
+
+  document.getElementById('mainContentView').innerHTML = html;
+}
+
+// -------------------------------------------------------------
+// 5. ACTIVITY LOGS VIEW
 // -------------------------------------------------------------
 async function renderLogsView() {
   const { data: logs } = await db.from('activity_logs').select('*').order('created_at', { ascending: false });
@@ -670,22 +716,39 @@ async function renderLogsView() {
 }
 
 // -------------------------------------------------------------
-// 5. MASTER SETUP VIEW
+// 6. MASTER SETUP VIEW (WITH TRIP USER ASSIGNMENT & FULL USER EDIT)
 // -------------------------------------------------------------
 function renderSetupView() {
+  const activeUsers = appData.users.filter(u => u.status !== 'INACTIVE');
+
   document.getElementById('mainContentView').innerHTML = `
     <div class="border-b border-slate-200/80 pb-4">
       <h2 class="text-2xl font-black text-amber-600 brand-font">Master Setup (Khusus Admin)</h2>
       <p class="text-xs text-slate-400 mt-0.5">Kelola trip, user terdaftar, dan kategori pengeluaran</p>
     </div>
 
-    <!-- 1. TRIP MANAGEMENT -->
+    <!-- 1. TRIP MANAGEMENT WITH USER ASSIGNMENT -->
     <section class="bg-white p-7 rounded-[24px] border border-slate-200/70 ui-card-shadow space-y-4">
       <h3 class="text-xs font-bold uppercase text-slate-700">1. Buat & Kelola Judul Trip</h3>
-      <div class="flex gap-3">
-        <input type="text" id="newTripTitle" placeholder="Misal: Outing Bali 2026" class="flex-1 px-4 py-2.5 text-xs border border-slate-200 rounded-xl bg-slate-50 focus:outline-none">
-        <button onclick="handleCreateTripSPA()" class="px-5 py-2.5 bg-amber-500 hover:bg-amber-600 text-white font-bold text-xs rounded-xl shadow-md">Buat Trip</button>
+      
+      <div class="space-y-3 bg-slate-50 p-4 rounded-2xl border border-slate-200/80">
+        <div class="flex gap-3">
+          <input type="text" id="newTripTitle" placeholder="Misal: Outing Bali 2026" class="flex-1 px-4 py-2.5 text-xs border border-slate-200 rounded-xl bg-white focus:outline-none font-bold">
+          <button onclick="handleCreateTripSPA()" class="px-5 py-2.5 bg-amber-500 hover:bg-amber-600 text-white font-bold text-xs rounded-xl shadow-md">Buat Trip</button>
+        </div>
+        <div class="space-y-1">
+          <label class="text-[11px] font-bold text-slate-500 uppercase">Pilih Anggota yang Di-assign ke Trip Ini:</label>
+          <div id="newTripUsersChecklist" class="grid grid-cols-2 sm:grid-cols-4 gap-2 pt-1">
+            ${activeUsers.map(u => `
+              <label class="flex items-center p-2 bg-white border border-slate-200 rounded-xl cursor-pointer">
+                <input type="checkbox" value="${u.email}" checked class="trip-new-chk-user w-3.5 h-3.5 text-blue-600 rounded">
+                <span class="ml-2 text-xs font-bold text-slate-700 truncate">${u.nama}</span>
+              </label>
+            `).join('')}
+          </div>
+        </div>
       </div>
+
       <div class="pt-2">
         <p class="text-[11px] font-bold text-slate-400 uppercase tracking-wider mb-2">Daftar Trip Terdaftar:</p>
         <div class="space-y-2">
@@ -693,11 +756,17 @@ function renderSetupView() {
             ? `<p class="text-xs text-slate-400 italic">Belum ada trip.</p>`
             : appData.trips.map(t => {
                 const isInactive = t.status === 'INACTIVE';
+                const assignedCount = (t.active_participant_emails || []).length;
                 return `
                   <div class="p-3 bg-slate-50 border border-slate-200/80 rounded-2xl text-xs flex justify-between items-center ${isInactive ? 'opacity-60' : ''}">
-                    <span class="font-bold text-slate-800">${t.judul} ${isInactive ? '<span class="text-[9px] px-2 py-0.5 bg-rose-100 text-rose-700 rounded-full font-bold ml-1">INACTIVE</span>' : ''}</span>
+                    <div>
+                      <span class="font-bold text-slate-800">${t.judul}</span>
+                      <span class="text-[10px] text-blue-600 font-bold ml-2">(${assignedCount} Anggota Ter-assign)</span>
+                      ${isInactive ? '<span class="text-[9px] px-2 py-0.5 bg-rose-100 text-rose-700 rounded-full font-bold ml-1">INACTIVE</span>' : ''}
+                    </div>
                     <div class="flex items-center gap-1.5 shrink-0">
-                      <button onclick="handleEditTripSPA('${t.id}', '${t.judul.replace(/'/g, "\\'")}')" class="px-2.5 py-1 bg-white border border-slate-300 hover:bg-slate-100 text-slate-700 rounded-lg text-[10px] font-bold">Edit</button>
+                      <button onclick="openAssignUsersModalSPA('${t.id}')" class="px-2.5 py-1 bg-blue-50 border border-blue-200 text-blue-600 hover:bg-blue-100 rounded-lg text-[10px] font-bold">Edit Anggota</button>
+                      <button onclick="handleEditTripSPA('${t.id}', '${t.judul.replace(/'/g, "\\'")}')" class="px-2.5 py-1 bg-white border border-slate-300 hover:bg-slate-100 text-slate-700 rounded-lg text-[10px] font-bold">Edit Judul</button>
                       <button onclick="handleToggleTripStatusSPA('${t.id}', '${t.status || 'ACTIVE'}')" class="px-2.5 py-1 ${isInactive ? 'bg-emerald-50 text-emerald-600 border border-emerald-200' : 'bg-amber-50 text-amber-700 border border-amber-200'} rounded-lg text-[10px] font-bold">${isInactive ? 'Aktifkan' : 'Nonaktif'}</button>
                       <button onclick="handleDeleteTripSPA('${t.id}', '${t.judul.replace(/'/g, "\\'")}')" class="px-2.5 py-1 bg-rose-50 border border-rose-200 text-rose-600 hover:bg-rose-100 rounded-lg text-[10px] font-bold">Hapus</button>
                     </div>
@@ -708,11 +777,11 @@ function renderSetupView() {
       </div>
     </section>
 
-    <!-- 2. USER MANAGEMENT -->
+    <!-- 2. USER MANAGEMENT (WITH FULL EDIT USER FORM) -->
     <section class="bg-white p-7 rounded-[24px] border border-slate-200/70 ui-card-shadow space-y-4">
       <h3 class="text-xs font-bold uppercase text-slate-700">2. Tambah & Kelola User Sistem</h3>
       <div class="grid grid-cols-1 sm:grid-cols-3 gap-3">
-        <input type="text" id="newUserName" placeholder="Nama Lengkap" class="px-4 py-2.5 text-xs border border-slate-200 rounded-xl bg-slate-50 focus:outline-none">
+        <input type="text" id="newUserName" placeholder="Nama Lengkap" class="px-4 py-2.5 text-xs border border-slate-200 rounded-xl bg-slate-50 focus:outline-none font-bold">
         <input type="email" id="newUserEmail" placeholder="email@favehotels.com" class="px-4 py-2.5 text-xs border border-slate-200 rounded-xl bg-slate-50 focus:outline-none">
         <div class="flex gap-2">
           <select id="newUserRole" class="px-3 py-2.5 text-xs border border-slate-200 rounded-xl bg-slate-50 font-bold text-slate-700">
@@ -736,7 +805,7 @@ function renderSetupView() {
                       <p class="text-[10px] text-slate-400 truncate mt-0.5">${u.email}</p>
                     </div>
                     <div class="flex items-center gap-1.5 shrink-0">
-                      <button onclick="handleEditUserSPA('${u.id}', '${u.nama.replace(/'/g, "\\'")}', '${u.role}')" class="px-2.5 py-1 bg-white border border-slate-300 hover:bg-slate-100 text-slate-700 rounded-lg text-[10px] font-bold">Edit</button>
+                      <button onclick="openEditUserModalSPA('${u.id}')" class="px-2.5 py-1 bg-white border border-slate-300 hover:bg-slate-100 text-slate-700 rounded-lg text-[10px] font-bold">Edit Full</button>
                       <button onclick="handleToggleUserStatusSPA('${u.id}', '${u.status || 'ACTIVE'}')" class="px-2.5 py-1 ${isInactive ? 'bg-emerald-50 text-emerald-600 border border-emerald-200' : 'bg-amber-50 text-amber-700 border border-amber-200'} rounded-lg text-[10px] font-bold">${isInactive ? 'Aktifkan' : 'Nonaktif'}</button>
                       <button onclick="handleDeleteUserSPA('${u.id}', '${u.email}')" class="px-2.5 py-1 bg-rose-50 border border-rose-200 text-rose-600 hover:bg-rose-100 rounded-lg text-[10px] font-bold">Hapus</button>
                     </div>
@@ -779,31 +848,106 @@ function renderSetupView() {
   `;
 }
 
-// SETUP HANDLERS WITH MODERN NOTIFICATIONS
+// -------------------------------------------------------------
+// TRIP CREATION & ASSIGNMENT HANDLERS
+// -------------------------------------------------------------
 async function handleCreateTripSPA() {
   const judul = document.getElementById('newTripTitle').value.trim();
   if (!judul) return showToast('Masukkan judul trip!', 'warning');
 
-  const { error } = await db.from('trips').insert([{ judul, created_by: currentUser.email, status: 'ACTIVE' }]);
+  const selectedUsers = Array.from(document.querySelectorAll('.trip-new-chk-user:checked')).map(c => c.value);
+
+  const { error } = await db.from('trips').insert([{
+    judul, 
+    created_by: currentUser.email, 
+    status: 'ACTIVE',
+    active_participant_emails: selectedUsers
+  }]);
+
   if (error) return showToast('Gagal membuat trip: ' + error.message, 'error');
 
-  await db.from('activity_logs').insert([{ user_email: currentUser.email, action: 'CREATE_TRIP', details: `Membuat trip: ${judul}` }]);
+  await db.from('activity_logs').insert([{ user_email: currentUser.email, action: 'CREATE_TRIP', details: `Membuat trip: ${judul} dengan ${selectedUsers.length} anggota` }]);
   showToast('Trip baru berhasil dibuat!', 'success');
   await refreshAppData();
   renderSetupView();
 }
 
+// MODAL EDIT ANGGOTA TER-ASSIGN KE TRIP
+function openAssignUsersModalSPA(tripId) {
+  const trip = appData.trips.find(t => t.id === tripId);
+  if (!trip) return;
+
+  const currentAssigned = trip.active_participant_emails || [];
+  const activeUsers = appData.users.filter(u => u.status !== 'INACTIVE');
+
+  document.getElementById('modalTitle').innerText = `Edit Anggota: ${trip.judul}`;
+  document.getElementById('modalMessage').innerText = 'Pilih peserta yang berpartisipasi pada trip ini:';
+  
+  const container = document.getElementById('modalInputContainer');
+  container.classList.remove('hidden');
+  container.innerHTML = `
+    <div class="grid grid-cols-1 sm:grid-cols-2 gap-2 max-h-56 overflow-y-auto p-1 custom-scrollbar">
+      ${activeUsers.map(u => `
+        <label class="flex items-center p-2 bg-slate-50 border border-slate-200 rounded-xl cursor-pointer">
+          <input type="checkbox" value="${u.email}" ${currentAssigned.includes(u.email) ? 'checked' : ''} class="trip-edit-assign-user w-4 h-4 text-blue-600 rounded">
+          <span class="ml-2 text-xs font-bold text-slate-700 truncate">${u.nama}</span>
+        </label>
+      `).join('')}
+    </div>
+  `;
+
+  document.getElementById('modalBtnCancel').classList.remove('hidden');
+  const confirmBtn = document.getElementById('modalBtnConfirm');
+  confirmBtn.innerText = 'Simpan Anggota';
+  confirmBtn.onclick = async () => {
+    const newAssigned = Array.from(document.querySelectorAll('.trip-edit-assign-user:checked')).map(c => c.value);
+    const { error } = await db.from('trips').update({ active_participant_emails: newAssigned }).eq('id', tripId);
+
+    if (error) {
+      showToast('Gagal update anggota: ' + error.message, 'error');
+    } else {
+      showToast('Anggota trip berhasil diperbarui!', 'success');
+      await refreshAppData();
+      closeCustomModal(true);
+      renderSetupView();
+    }
+  };
+
+  document.getElementById('customModal').classList.remove('hidden');
+}
+
 async function handleEditTripSPA(id, oldJudul) {
-  const newJudul = await showCustomPrompt('Edit Judul Trip', oldJudul);
-  if (!newJudul || newJudul.trim() === '' || newJudul === oldJudul) return;
+  const trip = appData.trips.find(t => t.id === id);
+  if (!trip) return;
 
-  const { error } = await db.from('trips').update({ judul: newJudul.trim() }).eq('id', id);
-  if (error) return showToast('Gagal edit trip: ' + error.message, 'error');
+  document.getElementById('modalTitle').innerText = 'Edit Judul Trip';
+  document.getElementById('modalMessage').innerText = '';
+  
+  const container = document.getElementById('modalInputContainer');
+  container.classList.remove('hidden');
+  container.innerHTML = `<input type="text" id="modalTripEditTitleInput" value="${oldJudul}" class="w-full px-4 py-2.5 text-xs border border-slate-200 rounded-xl bg-slate-50 font-bold focus:outline-none">`;
 
-  await db.from('activity_logs').insert([{ user_email: currentUser.email, action: 'EDIT_TRIP', details: `Mengubah judul trip "${oldJudul}" menjadi "${newJudul}"` }]);
-  showToast('Judul trip diperbarui!', 'success');
-  await refreshAppData();
-  renderSetupView();
+  document.getElementById('modalBtnCancel').classList.remove('hidden');
+  const confirmBtn = document.getElementById('modalBtnConfirm');
+  confirmBtn.innerText = 'Simpan Judul';
+  confirmBtn.onclick = async () => {
+    const newJudul = document.getElementById('modalTripEditTitleInput').value.trim();
+    if (!newJudul || newJudul === oldJudul) {
+      closeCustomModal(false);
+      return;
+    }
+
+    const { error } = await db.from('trips').update({ judul: newJudul }).eq('id', id);
+    if (error) return showToast('Gagal edit trip: ' + error.message, 'error');
+
+    await db.from('activity_logs').insert([{ user_email: currentUser.email, action: 'EDIT_TRIP', details: `Mengubah judul trip "${oldJudul}" menjadi "${newJudul}"` }]);
+    showToast('Judul trip diperbarui!', 'success');
+    await refreshAppData();
+    closeCustomModal(true);
+    renderSetupView();
+  };
+
+  document.getElementById('customModal').classList.remove('hidden');
 }
 
 async function handleToggleTripStatusSPA(id, currentStatus) {
@@ -837,6 +981,9 @@ async function handleDeleteTripSPA(id, judulTrip) {
   renderSetupView();
 }
 
+// -------------------------------------------------------------
+// USER MANAGEMENT HANDLERS (FULL EDIT USER FORM)
+// -------------------------------------------------------------
 async function handleAddUserSPA() {
   const nama = document.getElementById('newUserName').value.trim();
   const email = document.getElementById('newUserEmail').value.trim().toLowerCase();
@@ -853,17 +1000,73 @@ async function handleAddUserSPA() {
   renderSetupView();
 }
 
-async function handleEditUserSPA(id, oldNama, oldRole) {
-  const newNama = await showCustomPrompt('Edit Nama User', oldNama);
-  if (!newNama || newNama.trim() === '') return;
+// MODAL EDIT FULL DATA USER (NAMA, EMAIL, ROLE, STATUS)
+function openEditUserModalSPA(userId) {
+  const targetUser = appData.users.find(u => u.id === userId);
+  if (!targetUser) return;
 
-  const { error } = await db.from('users').update({ nama: newNama.trim() }).eq('id', id);
-  if (error) return showToast('Gagal edit user: ' + error.message, 'error');
+  document.getElementById('modalTitle').innerText = `Edit Full User: ${targetUser.nama}`;
+  document.getElementById('modalMessage').innerText = '';
+  
+  const container = document.getElementById('modalInputContainer');
+  container.classList.remove('hidden');
+  container.innerHTML = `
+    <div class="space-y-3 text-left">
+      <div class="space-y-1">
+        <label class="text-[10px] font-bold text-slate-500 uppercase">Nama Lengkap</label>
+        <input type="text" id="editUserNama" value="${targetUser.nama}" class="w-full px-3 py-2 text-xs border border-slate-200 rounded-xl bg-slate-50 font-bold focus:outline-none">
+      </div>
+      <div class="space-y-1">
+        <label class="text-[10px] font-bold text-slate-500 uppercase">Alamat Email</label>
+        <input type="email" id="editUserEmail" value="${targetUser.email}" class="w-full px-3 py-2 text-xs border border-slate-200 rounded-xl bg-slate-50 font-semibold focus:outline-none">
+      </div>
+      <div class="grid grid-cols-2 gap-2">
+        <div class="space-y-1">
+          <label class="text-[10px] font-bold text-slate-500 uppercase">Role</label>
+          <select id="editUserRole" class="w-full px-3 py-2 text-xs border border-slate-200 rounded-xl bg-slate-50 font-bold text-slate-700">
+            <option value="USER" ${targetUser.role === 'USER' ? 'selected' : ''}>USER</option>
+            <option value="ADMIN" ${targetUser.role === 'ADMIN' ? 'selected' : ''}>ADMIN</option>
+          </select>
+        </div>
+        <div class="space-y-1">
+          <label class="text-[10px] font-bold text-slate-500 uppercase">Status</label>
+          <select id="editUserStatus" class="w-full px-3 py-2 text-xs border border-slate-200 rounded-xl bg-slate-50 font-bold text-slate-700">
+            <option value="ACTIVE" ${targetUser.status !== 'INACTIVE' ? 'selected' : ''}>ACTIVE</option>
+            <option value="INACTIVE" ${targetUser.status === 'INACTIVE' ? 'selected' : ''}>INACTIVE</option>
+          </select>
+        </div>
+      </div>
+    </div>
+  `;
 
-  await db.from('activity_logs').insert([{ user_email: currentUser.email, action: 'EDIT_USER', details: `Mengubah data user ID: ${id}` }]);
-  showToast('Data user diperbarui!', 'success');
-  await refreshAppData();
-  renderSetupView();
+  document.getElementById('modalBtnCancel').classList.remove('hidden');
+  const confirmBtn = document.getElementById('modalBtnConfirm');
+  confirmBtn.innerText = 'Simpan Perubahan';
+  confirmBtn.onclick = async () => {
+    const newNama = document.getElementById('editUserNama').value.trim();
+    const newEmail = document.getElementById('editUserEmail').value.trim().toLowerCase();
+    const newRole = document.getElementById('editUserRole').value;
+    const newStatus = document.getElementById('editUserStatus').value;
+
+    if (!newNama || !newEmail) return showToast('Nama dan Email tidak boleh kosong!', 'warning');
+
+    const { error } = await db.from('users').update({
+      nama: newNama,
+      email: newEmail,
+      role: newRole,
+      status: newStatus
+    }).eq('id', userId);
+
+    if (error) return showToast('Gagal update user: ' + error.message, 'error');
+
+    await db.from('activity_logs').insert([{ user_email: currentUser.email, action: 'EDIT_USER_FULL', details: `Mengubah data user (${targetUser.email})` }]);
+    showToast('Data user berhasil diperbarui!', 'success');
+    await refreshAppData();
+    closeCustomModal(true);
+    renderSetupView();
+  };
+
+  document.getElementById('customModal').classList.remove('hidden');
 }
 
 async function handleToggleUserStatusSPA(id, currentStatus) {
@@ -898,6 +1101,9 @@ async function handleDeleteUserSPA(id, emailUser) {
   renderSetupView();
 }
 
+// -------------------------------------------------------------
+// CATEGORY HANDLERS
+// -------------------------------------------------------------
 async function handleAddCategorySPA() {
   const nama = document.getElementById('newCategoryName').value.trim();
   if (!nama) return showToast('Masukkan nama kategori!', 'warning');
