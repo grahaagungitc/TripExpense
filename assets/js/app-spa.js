@@ -570,21 +570,36 @@ function renderSettlementView() {
   
   let summaryMap = {};
   tripExpenses.forEach(exp => {
-    const perOrang = exp.nominal / (exp.peserta_emails.length || 1);
-    exp.peserta_emails.forEach(pEmail => {
-      if (pEmail.toLowerCase() !== exp.pembayar_email.toLowerCase()) {
-        const pairKey = `${pEmail.toLowerCase()}->${exp.pembayar_email.toLowerCase()}`;
+    const perOrang = parseFloat(exp.nominal || 0) / (exp.peserta_emails.length || 1);
+    const pembayarLower = (exp.pembayar_email || '').toLowerCase().trim();
+
+    exp.peserta_emails.forEach(pEmailRaw => {
+      const pesertaLower = (pEmailRaw || '').toLowerCase().trim();
+
+      if (pesertaLower !== pembayarLower) {
+        const pairKey = `${pesertaLower}->${pembayarLower}`;
+
         if (!summaryMap[pairKey]) {
           summaryMap[pairKey] = { 
-            dariEmail: pEmail, 
-            keEmail: exp.pembayar_email, 
+            dariEmail: pesertaLower, 
+            keEmail: pembayarLower, 
             totalNominal: 0,
             expenseStruks: []
           };
         }
+
         summaryMap[pairKey].totalNominal += perOrang;
-        if (exp.bukti_url && !summaryMap[pairKey].expenseStruks.includes(exp.bukti_url)) {
-          summaryMap[pairKey].expenseStruks.push({ item: exp.nama_item, url: exp.bukti_url });
+
+        // Kumpulkan semua nota/struk dari item transaksi yang bersangkutan
+        if (exp.bukti_url) {
+          const isExist = summaryMap[pairKey].expenseStruks.some(s => s.url === exp.bukti_url);
+          if (!isExist) {
+            summaryMap[pairKey].expenseStruks.push({
+              item: exp.nama_item,
+              url: exp.bukti_url,
+              nominal: exp.nominal
+            });
+          }
         }
       }
     });
@@ -595,15 +610,15 @@ function renderSettlementView() {
     : Object.values(summaryMap).map(s => {
         const dariNama = getUserNameByEmail(s.dariEmail);
         const keNama = getUserNameByEmail(s.keEmail);
-        const isPengutang = currentUser.email.toLowerCase() === s.dariEmail.toLowerCase();
-        const isPembayar = currentUser.email.toLowerCase() === s.keEmail.toLowerCase();
+        const isPengutang = currentUser.email.toLowerCase().trim() === s.dariEmail;
+        const isPembayar = currentUser.email.toLowerCase().trim() === s.keEmail;
         const isAdmin = currentUser.role === 'ADMIN';
 
-        // Cari record payment dari database
+        // Cari data pembayaran dari state
         const paymentRecord = appData.payments.find(p => 
           p.trip_id === selectedTrip.id && 
-          p.dari_email.toLowerCase() === s.dariEmail.toLowerCase() && 
-          p.ke_email.toLowerCase() === s.keEmail.toLowerCase()
+          (p.dari_email || '').toLowerCase().trim() === s.dariEmail && 
+          (p.ke_email || '').toLowerCase().trim() === s.keEmail
         );
 
         const status = paymentRecord ? paymentRecord.status : 'PENDING';
@@ -613,7 +628,7 @@ function renderSettlementView() {
         return `
           <div class="p-5 bg-slate-50 border border-slate-200/80 rounded-[20px] space-y-4 text-xs ui-card-shadow">
             
-            <!-- HEADER USER INFO -->
+            <!-- INFORMASI PENGUTANG & PENAGIH -->
             <div class="flex items-center justify-between pb-3 border-b border-slate-200/60">
               <div class="flex items-center gap-2">
                 ${getUserAvatarHTML(s.dariEmail, 'w-8 h-8 text-xs')}
@@ -627,17 +642,17 @@ function renderSettlementView() {
               <span class="text-base font-black text-blue-600">Rp ${Math.round(s.totalNominal).toLocaleString('id-ID')}</span>
             </div>
 
-            <!-- PREVIEW FILE BUKTI TF & STRUK AWAL -->
+            <!-- SEMUA BERKAS (BUKTI TF + NOTA EXPENSE) -->
             <div class="space-y-2 bg-white p-3 rounded-xl border border-slate-200/60">
               <p class="text-[10px] font-extrabold uppercase tracking-wider text-slate-400">Berkas / Lampiran Pembayaran:</p>
               
               <div class="flex flex-wrap items-center gap-2">
-                <!-- FILE BUKTI TF -->
+                <!-- BUKTI TRANSFER (TF) -->
                 ${hasBuktiTF ? `
-                  <div class="flex items-center gap-1 bg-emerald-50 border border-emerald-200 text-emerald-700 px-3 py-1.5 rounded-xl font-bold text-[11px]">
+                  <div class="flex items-center gap-1.5 bg-emerald-50 border border-emerald-200 text-emerald-700 px-3 py-1.5 rounded-xl font-bold text-[11px]">
                     <i class="ri-checkbox-circle-fill text-emerald-600"></i>
                     <a href="${buktiTfUrl}" target="_blank" class="hover:underline">Lihat Bukti TF</a>
-                    ${(isPengutang || isAdmin) ? `
+                    ${(isPengutang || isAdmin) && status !== 'APPROVED' ? `
                       <label class="cursor-pointer ml-1 text-slate-400 hover:text-blue-600" title="Ganti Bukti TF">
                         <i class="ri-edit-line"></i>
                         <input type="file" accept="image/*,application/pdf" class="hidden" onchange="uploadBulkProofSPA(event, '${selectedTrip.id}', '${s.dariEmail}', '${s.keEmail}')">
@@ -648,12 +663,12 @@ function renderSettlementView() {
                   <span class="text-[11px] text-slate-400 italic">Belum ada Bukti TF</span>
                 `}
 
-                <!-- STRUK PEMBAYARAN AWAL -->
-                ${s.expenseStruks.map(st => `
-                  <a href="${st.url}" target="_blank" class="flex items-center gap-1 bg-slate-100 border border-slate-200 text-slate-700 px-3 py-1.5 rounded-xl font-bold text-[11px] hover:bg-slate-200">
-                    <i class="ri-file-list-3-line text-blue-600"></i> Struk: ${st.item}
+                <!-- DAFTAR NOTA / STRUK DARI INPUT EXPENSE -->
+                ${s.expenseStruks.length > 0 ? s.expenseStruks.map(st => `
+                  <a href="${st.url}" target="_blank" class="flex items-center gap-1.5 bg-blue-50 border border-blue-200 text-blue-700 px-3 py-1.5 rounded-xl font-bold text-[11px] hover:bg-blue-100 transition">
+                    <i class="ri-file-text-line text-blue-600"></i> Nota: ${st.item}
                   </a>
-                `).join('')}
+                `).join('') : '<span class="text-[11px] text-slate-400 italic">• Tidak ada foto nota expense</span>'}
               </div>
             </div>
 
@@ -666,7 +681,7 @@ function renderSettlementView() {
                   </span>
                 ` : status === 'REJECTED' ? `
                   <span class="px-3 py-1 bg-rose-100 text-rose-700 font-black text-[11px] rounded-full flex items-center gap-1">
-                    <i class="ri-close-circle-line"></i> DITOLAK (Upload Ulang Valid)
+                    <i class="ri-close-circle-line"></i> DITOLAK (Upload Ulang)
                   </span>
                 ` : `
                   <span class="px-3 py-1 bg-amber-100 text-amber-700 font-black text-[11px] rounded-full flex items-center gap-1">
@@ -676,7 +691,6 @@ function renderSettlementView() {
               </div>
 
               <div class="flex items-center gap-2">
-                <!-- TOMBOL UPLOAD BUKTI TF (TAMPILKAN DAHULU JIKA BELUM DILUNASI) -->
                 ${(isPengutang || isAdmin) && status !== 'APPROVED' ? `
                   <label class="cursor-pointer text-[11px] bg-blue-600 hover:bg-blue-700 text-white px-3.5 py-1.5 rounded-xl font-bold shadow-md transition flex items-center gap-1">
                     <i class="ri-upload-2-line"></i> ${hasBuktiTF ? 'Ganti Bukti TF' : 'Upload Bukti TF'}
@@ -684,7 +698,6 @@ function renderSettlementView() {
                   </label>
                 ` : ''}
 
-                <!-- TOMBOL APPROVE / REJECT (HANYA MUNCUL JIKA SUDAH ADA BUKTI TF) -->
                 ${(isPembayar || isAdmin) && hasBuktiTF && status !== 'APPROVED' ? `
                   <button onclick="updateSettlementStatusSPA('${selectedTrip.id}', '${s.dariEmail}', '${s.keEmail}', 'APPROVED')" class="text-[11px] bg-emerald-600 hover:bg-emerald-700 text-white px-3 py-1.5 rounded-xl font-bold shadow-md transition">
                     Approve Lunas
@@ -704,7 +717,7 @@ function renderSettlementView() {
     <div class="flex flex-col sm:flex-row sm:items-center justify-between gap-4 border-b border-slate-200/80 pb-4">
       <div>
         <h2 class="text-2xl font-black text-slate-900 brand-font">Split & Settlement</h2>
-        <p class="text-xs text-slate-400 mt-0.5">Konfirmasi pelunasan untuk trip: <strong>${selectedTrip ? selectedTrip.judul : 'Pilih Trip'}</strong></p>
+        <p class="text-xs text-slate-400 mt-0.5">Konfirmasi pelunasan & rekap nota untuk trip: <strong>${selectedTrip ? selectedTrip.judul : 'Pilih Trip'}</strong></p>
       </div>
       <div>${renderGlobalTripSelectorHTML()}</div>
     </div>
@@ -718,7 +731,6 @@ function renderSettlementView() {
     </div>
   `;
 }
-
 // UPLOAD ATAU GANTI BUKTI TF
 async function uploadBulkProofSPA(event, tripId, dariEmail, keEmail) {
   const file = event.target.files[0];
@@ -732,14 +744,37 @@ async function uploadBulkProofSPA(event, tripId, dariEmail, keEmail) {
   const { data: pubData } = db.storage.from('receipts').getPublicUrl(fileName);
   const buktiUrl = pubData.publicUrl;
 
-  // Upsert ke settlement_payments
-  const { error: dbError } = await db.from('settlement_payments').upsert({
-    trip_id: tripId,
-    dari_email: dariEmail.toLowerCase().trim(),
-    ke_email: keEmail.toLowerCase().trim(),
-    bukti_url: buktiUrl,
-    status: 'PENDING'
-  }, { onConflict: 'trip_id,dari_email,ke_email' });
+  const dariClean = dariEmail.toLowerCase().trim();
+  const keClean = keEmail.toLowerCase().trim();
+
+  // 1. Cek apakah record sudah ada
+  const { data: existingRecords } = await db.from('settlement_payments')
+    .select('id')
+    .eq('trip_id', tripId)
+    .eq('dari_email', dariClean)
+    .eq('ke_email', keClean);
+
+  let dbError = null;
+
+  if (existingRecords && existingRecords.length > 0) {
+    // Update jika record sudah ada
+    const res = await db.from('settlement_payments').update({
+      bukti_url: buktiUrl,
+      status: 'PENDING',
+      updated_at: new Date().toISOString()
+    }).eq('id', existingRecords[0].id);
+    dbError = res.error;
+  } else {
+    // Insert jika record belum ada
+    const res = await db.from('settlement_payments').insert([{
+      trip_id: tripId,
+      dari_email: dariClean,
+      ke_email: keClean,
+      bukti_url: buktiUrl,
+      status: 'PENDING'
+    }]);
+    dbError = res.error;
+  }
 
   if (dbError) return showToast('Gagal update database: ' + dbError.message, 'error');
 
@@ -752,7 +787,7 @@ async function uploadBulkProofSPA(event, tripId, dariEmail, keEmail) {
   renderSettlementView();
 }
 
-// UPDATE STATUS APPROVAL / REJECTION
+// UPDATE STATUS APPROVAL / REJECT DENGAN AMAN
 async function updateSettlementStatusSPA(tripId, dariEmail, keEmail, newStatus) {
   const title = newStatus === 'APPROVED' ? 'Approve Pelunasan' : 'Tolak / Reject Bukti TF';
   const msg = newStatus === 'APPROVED' 
@@ -762,14 +797,34 @@ async function updateSettlementStatusSPA(tripId, dariEmail, keEmail, newStatus) 
   const isConfirmed = await showCustomConfirm(title, msg);
   if (!isConfirmed) return;
 
-  const { error } = await db.from('settlement_payments').upsert({
-    trip_id: tripId,
-    dari_email: dariEmail.toLowerCase().trim(),
-    ke_email: keEmail.toLowerCase().trim(),
-    status: newStatus
-  }, { onConflict: 'trip_id,dari_email,ke_email' });
+  const dariClean = dariEmail.toLowerCase().trim();
+  const keClean = keEmail.toLowerCase().trim();
 
-  if (error) return showToast('Gagal mengubah status: ' + error.message, 'error');
+  const { data: existingRecords } = await db.from('settlement_payments')
+    .select('id')
+    .eq('trip_id', tripId)
+    .eq('dari_email', dariClean)
+    .eq('ke_email', keClean);
+
+  let dbError = null;
+
+  if (existingRecords && existingRecords.length > 0) {
+    const res = await db.from('settlement_payments').update({
+      status: newStatus,
+      updated_at: new Date().toISOString()
+    }).eq('id', existingRecords[0].id);
+    dbError = res.error;
+  } else {
+    const res = await db.from('settlement_payments').insert([{
+      trip_id: tripId,
+      dari_email: dariClean,
+      ke_email: keClean,
+      status: newStatus
+    }]);
+    dbError = res.error;
+  }
+
+  if (dbError) return showToast('Gagal mengubah status: ' + dbError.message, 'error');
 
   await db.from('activity_logs').insert([{
     user_email: currentUser.email, action: `SETTLEMENT_${newStatus}`, details: `${newStatus === 'APPROVED' ? 'Menyetujui' : 'Menolak'} pelunasan dari ${dariEmail}`
