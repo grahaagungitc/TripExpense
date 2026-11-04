@@ -1,0 +1,200 @@
+<!DOCTYPE html>
+<html lang="id">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Input Expense - Expense Tracker</title>
+  <script src="https://cdn.tailwindcss.com"></script>
+  <link href="https://cdn.jsdelivr.net/npm/remixicon@3.5.0/fonts/remixicon.css" rel="stylesheet">
+  <link rel="stylesheet" href="assets/css/style.css">
+  <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
+</head>
+<body class="bg-slate-100 flex min-h-screen font-sans">
+
+  <!-- SIDEBAR CONTAINER -->
+  <div id="sidebarContainer"></div>
+
+  <!-- MAIN CONTENT -->
+  <main class="flex-1 p-8 space-y-6 overflow-y-auto">
+    <div class="border-b pb-4 border-slate-200">
+      <h2 class="text-2xl font-extrabold text-slate-900">Catat Expense Baru</h2>
+      <p class="text-xs text-slate-500">Tambahkan pengeluaran baru dan pilih anggota yang berpartisipasi.</p>
+    </div>
+
+    <!-- FORM INPUT EXPENSE -->
+    <section class="bg-white p-6 rounded-3xl shadow-sm border border-slate-200 space-y-4">
+      <form id="expenseForm" onsubmit="handleExpenseSubmit(event)" class="space-y-4">
+        <div class="grid grid-cols-1 md:grid-cols-2 gap-4">
+          <div class="space-y-1">
+            <label class="text-xs font-semibold text-slate-700">Judul Trip / Event</label>
+            <select id="expTripSelect" onchange="onSelectTripChange()" required class="w-full px-3 py-2.5 text-xs border border-slate-300 rounded-xl font-bold text-indigo-700 focus:outline-none">
+            </select>
+          </div>
+          <div class="space-y-1">
+            <label class="text-xs font-semibold text-slate-700">Kategori Expense</label>
+            <select id="expKategoriSelect" required class="w-full px-3 py-2.5 text-xs border border-slate-300 rounded-xl font-semibold text-slate-700 focus:outline-none">
+            </select>
+          </div>
+        </div>
+
+        <div class="grid grid-cols-1 md:grid-cols-3 gap-4">
+          <div class="md:col-span-2 space-y-1">
+            <label class="text-xs font-semibold text-slate-700">Nama Sub-Pengeluaran / Item</label>
+            <input type="text" id="expNamaItem" required placeholder="Misal: Bensin, Dinner, Tiket Masuk" class="w-full px-3 py-2.5 text-xs border border-slate-300 rounded-xl focus:outline-none">
+          </div>
+          <div class="space-y-1">
+            <label class="text-xs font-semibold text-slate-700">Total Nominal (Rp)</label>
+            <input type="number" id="expNominal" required placeholder="500000" class="w-full px-3 py-2.5 text-xs border border-slate-300 rounded-xl font-bold focus:outline-none">
+          </div>
+        </div>
+
+        <div class="grid grid-cols-1 md:grid-cols-2 gap-4">
+          <div class="space-y-1">
+            <label class="text-xs font-semibold text-slate-700">Yang Membayar Di Awal:</label>
+            <select id="expPembayarSelect" required class="w-full px-3 py-2.5 text-xs border border-slate-300 rounded-xl font-bold text-indigo-700 focus:outline-none">
+            </select>
+          </div>
+          <div class="space-y-1">
+            <label class="text-xs font-semibold text-slate-700">Lampirkan Foto Struk / Nota</label>
+            <input type="file" id="expBuktiFile" accept="image/*,application/pdf" class="w-full text-xs text-slate-500 border border-slate-300 rounded-xl p-1.5">
+          </div>
+        </div>
+
+        <div class="space-y-2 pt-2 border-t border-slate-100">
+          <label class="text-xs font-semibold text-slate-700">Anggota Yang Ikut Menanggung Tagihan Ini:</label>
+          <div id="expPesertaChecklist" class="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 gap-2"></div>
+        </div>
+
+        <button type="submit" class="w-full py-3 bg-indigo-600 hover:bg-indigo-700 text-white font-bold text-xs rounded-xl shadow-md transition flex items-center justify-center gap-2">
+          <i class="ri-save-line text-sm"></i> Simpan Sub-Expense
+        </button>
+      </form>
+    </section>
+
+    <!-- LOG HISTORI EXPENSE -->
+    <section class="bg-white p-6 rounded-3xl shadow-sm border border-slate-200 space-y-4">
+      <div class="flex items-center justify-between border-b pb-3 border-slate-100">
+        <h3 class="font-extrabold text-slate-800 text-sm">Log Transaksi Sub-Expense</h3>
+        <p class="text-xs font-extrabold text-indigo-600" id="totalSubExpenseCount">0 Transaksi</p>
+      </div>
+      <div id="expenseLogContainer" class="divide-y divide-slate-100"></div>
+    </section>
+  </main>
+
+  <script src="assets/js/supabase-client.js"></script>
+  <script src="assets/js/auth-guard.js"></script>
+  <script src="assets/js/sidebar.js"></script>
+  <script>
+    let pageData = { users: [], trips: [], categories: [], expenses: [] };
+
+    document.addEventListener('DOMContentLoaded', async () => {
+      const user = await checkAuthAndProtect();
+      if (!user) return;
+
+      renderSidebar('expense');
+      await loadPageData();
+    });
+
+    async function loadPageData() {
+      const { data: users } = await db.from('users').select('*');
+      const { data: trips } = await db.from('trips').select('*').order('created_at', { ascending: true });
+      const { data: categories } = await db.from('categories').select('*').order('nama', { ascending: true });
+      const { data: expenses } = await db.from('expenses').select('*').order('created_at', { ascending: false });
+
+      pageData = { users: users || [], trips: trips || [], categories: categories || [], expenses: expenses || [] };
+
+      // Render Dropdowns
+      document.getElementById('expTripSelect').innerHTML = pageData.trips.map(t => `<option value="${t.id}">${t.judul}</option>`).join('');
+      document.getElementById('expKategoriSelect').innerHTML = pageData.categories.map(c => `<option value="${c.nama}">${c.nama}</option>`).join('');
+      document.getElementById('expPembayarSelect').innerHTML = pageData.users.map(u => `
+        <option value="${u.email}" ${u.email.toLowerCase() === currentUser.email.toLowerCase() ? 'selected' : ''}>${u.nama} (${u.email})</option>
+      `).join('');
+
+      onSelectTripChange();
+      renderExpenseLogs();
+    }
+
+    function onSelectTripChange() {
+      const selectedTripId = document.getElementById('expTripSelect').value;
+      const targetTrip = pageData.trips.find(t => t.id === selectedTripId);
+      const activeEmails = targetTrip ? (targetTrip.active_participant_emails || []) : [];
+
+      const eligibleUsers = activeEmails.length > 0 
+        ? pageData.users.filter(u => activeEmails.includes(u.email))
+        : pageData.users;
+
+      document.getElementById('expPesertaChecklist').innerHTML = eligibleUsers.map(u => `
+        <label class="flex items-center p-2.5 bg-slate-50 border border-slate-200 rounded-xl cursor-pointer">
+          <input type="checkbox" value="${u.email}" checked class="exp-chk-peserta w-4 h-4 text-indigo-600 rounded">
+          <span class="ml-2 text-xs font-medium text-slate-700 truncate">${u.nama}</span>
+        </label>
+      `).join('');
+    }
+
+    async function handleExpenseSubmit(e) {
+      e.preventDefault();
+      const selectedPeserta = Array.from(document.querySelectorAll('.exp-chk-peserta:checked')).map(c => c.value);
+      if (!selectedPeserta.length) return alert('Pilih minimal 1 peserta!');
+
+      const tripId = document.getElementById('expTripSelect').value;
+      const kategori = document.getElementById('expKategoriSelect').value;
+      const item = document.getElementById('expNamaItem').value;
+      const nominal = parseFloat(document.getElementById('expNominal').value);
+      const pembayarEmail = document.getElementById('expPembayarSelect').value;
+      const fileInput = document.getElementById('expBuktiFile');
+
+      let buktiUrl = '';
+      if (fileInput.files.length > 0) {
+        const file = fileInput.files[0];
+        const fileName = `${Date.now()}_${file.name}`;
+        const { data } = await db.storage.from('receipts').upload(fileName, file);
+        if (data) {
+          const { data: pubData } = db.storage.from('receipts').getPublicUrl(fileName);
+          buktiUrl = pubData.publicUrl;
+        }
+      }
+
+      const { error } = await db.from('expenses').insert([{
+        trip_id: tripId, kategori, nama_item: item, nominal, pembayar_email: pembayarEmail, peserta_emails: selectedPeserta, bukti_url: buktiUrl
+      }]);
+
+      if (error) return alert('Gagal menyimpan: ' + error.message);
+
+      // Record Activity Log
+      await db.from('activity_logs').insert([{
+        user_email: currentUser.email,
+        action: 'CREATE_EXPENSE',
+        details: `Menambahkan sub-expense "${item}" senilai Rp ${nominal.toLocaleString('id-ID')}`
+      }]);
+
+      alert('Sub-expense berhasil dicatat!');
+      document.getElementById('expenseForm').reset();
+      await loadPageData();
+    }
+
+    function renderExpenseLogs() {
+      document.getElementById('totalSubExpenseCount').innerText = `${pageData.expenses.length} Transaksi`;
+      const container = document.getElementById('expenseLogContainer');
+
+      if (!pageData.expenses.length) {
+        container.innerHTML = `<p class="py-4 text-xs text-slate-400 italic">Belum ada riwayat transaksi.</p>`;
+        return;
+      }
+
+      container.innerHTML = pageData.expenses.map(e => `
+        <div class="py-3 flex items-center justify-between text-xs">
+          <div>
+            <span class="px-2 py-0.5 bg-indigo-50 text-indigo-600 rounded-md font-bold text-[10px]">${e.kategori || 'Umum'}</span>
+            <p class="font-bold text-slate-800 mt-1">${e.nama_item}</p>
+            <p class="text-slate-400 text-[11px]">Dibayar oleh: <strong>${e.pembayar_email}</strong> • ${e.peserta_emails.length} Peserta</p>
+          </div>
+          <div class="text-right">
+            <p class="font-extrabold text-slate-900 text-sm">Rp ${parseFloat(e.nominal).toLocaleString('id-ID')}</p>
+            ${e.bukti_url ? `<a href="${e.bukti_url}" target="_blank" class="text-indigo-600 font-bold hover:underline text-[10px]">Lihat Struk</a>` : ''}
+          </div>
+        </div>
+      `).join('');
+    }
+  </script>
+</body>
+</html>
