@@ -522,6 +522,8 @@
       db.auth.onAuthStateChange(async (event, session) => {
         if ((event === 'SIGNED_IN' || event === 'INITIAL_SESSION') && session) {
           await processAuthUser(session.user);
+        } else if (event === 'SIGNED_OUT') {
+          doLogoutClean();
         }
       });
 
@@ -529,11 +531,7 @@
       if (session && session.user) {
         await processAuthUser(session.user);
       } else {
-        const saved = localStorage.getItem('gh_user_session');
-        if (saved) {
-          currentUser = JSON.parse(saved);
-          showDashboard();
-        }
+        doLogoutClean();
       }
     });
 
@@ -547,31 +545,40 @@
       if (error) showToast('Gagal login via Google: ' + error.message, 'error');
     }
 
-    // STRICT AUTHENTICATION SECURITY: TANPA AUTO REGISTER
+    // AUTHENTICATION SECURITY DENGAN PENANGANAN ERROR RLS SUPABASE
     async function processAuthUser(authUser) {
-      if (!authUser) return;
-      const email = authUser.email ? authUser.email.toLowerCase().trim() : '';
-
-      // Cari apakah email persis terdaftar di tabel users
-      let { data: userRecord, error } = await db.from('users').select('*').ilike('email', email).maybeSingle();
-
-      if (!userRecord) {
-        // JIKA TIDAK TERDAFTAR: PAKSA SIGN OUT DAN BERI PERINGATAN
-        await db.auth.signOut();
-        localStorage.removeItem('gh_user_session');
-        currentUser = null;
-        
-        document.getElementById('mainDashboard').classList.add('hidden');
-        document.getElementById('loginScreen').classList.remove('hidden');
-
-        showToast(`Akses Ditolak: Email ${email} belum terdaftar di sistem. Silakan hubungi Admin!`, 'error');
+      if (!authUser || !authUser.email) {
+        doLogoutClean();
         return;
       }
 
-      // JIKA TERDAFTAR: SIMPAN USER RECORD & JALANKAN DASHBOARD
-      currentUser = userRecord;
-      localStorage.setItem('gh_user_session', JSON.stringify(currentUser));
-      showDashboard();
+      const email = authUser.email.toLowerCase().trim();
+
+      try {
+        const { data: userRecord, error } = await db
+          .from('users')
+          .select('*')
+          .ilike('email', email)
+          .maybeSingle();
+
+        // JIKA EMAIL TIDAK ADA ATAU DITOLAK OLEH RLS / ERROR SUPABASE
+        if (error || !userRecord) {
+          await db.auth.signOut();
+          doLogoutClean();
+          showToast(`Akses Ditolak: Email ${email} belum terdaftar di sistem. Hubungi Admin!`, 'error');
+          return;
+        }
+
+        // AKUN VERIFIKASI BERHASIL
+        currentUser = userRecord;
+        localStorage.setItem('gh_user_session', JSON.stringify(currentUser));
+        showDashboard();
+
+      } catch (err) {
+        await db.auth.signOut();
+        doLogoutClean();
+        showToast('Terjadi kesalahan validasi akun.', 'error');
+      }
     }
 
     function showDashboard() {
@@ -590,11 +597,16 @@
       fetchAppData();
     }
 
-    function doLogout() {
+    function doLogoutClean() {
       localStorage.removeItem('gh_user_session');
-      db.auth.signOut();
+      currentUser = null;
       document.getElementById('mainDashboard').classList.add('hidden');
       document.getElementById('loginScreen').classList.remove('hidden');
+    }
+
+    function doLogout() {
+      doLogoutClean();
+      db.auth.signOut();
     }
 
     function switchTab(tabName) {
@@ -653,12 +665,12 @@
 
       const pembayarSelect = document.getElementById('expPembayarSelect');
       pembayarSelect.innerHTML = appData.users.map(u => `
-        <option value="${u.email}" ${u.email.toLowerCase() === currentUser.email.toLowerCase() ? 'selected' : ''}>${u.nama} (${u.email})</option>
+        <option value="${u.email}" ${currentUser && u.email.toLowerCase() === currentUser.email.toLowerCase() ? 'selected' : ''}>${u.nama} (${u.email})</option>
       `).join('');
 
       onSelectTripForExpenseChange();
 
-      if (currentUser.role === 'ADMIN') {
+      if (currentUser && currentUser.role === 'ADMIN') {
         document.getElementById('adminTripList').innerHTML = appData.trips.length > 0 
           ? appData.trips.map(t => `
               <div class="flex items-center justify-between p-2 bg-white rounded-xl border border-amber-200 text-xs">
@@ -804,10 +816,10 @@
             }
           });
 
-          const isUserYangBayarAwal = currentUser.email.toLowerCase() === summary.keEmail.toLowerCase();
-          const isUserPengutang = currentUser.email.toLowerCase() === summary.dariEmail.toLowerCase();
+          const isUserYangBayarAwal = currentUser && currentUser.email.toLowerCase() === summary.keEmail.toLowerCase();
+          const isUserPengutang = currentUser && currentUser.email.toLowerCase() === summary.dariEmail.toLowerCase();
           
-          const canActionParent = (currentUser.role === 'ADMIN' || isUserYangBayarAwal) && hasUploadedProof && !allApproved;
+          const canActionParent = currentUser && (currentUser.role === 'ADMIN' || isUserYangBayarAwal) && hasUploadedProof && !allApproved;
           const childExpensesJson = JSON.stringify(summary.childExpenses).replace(/"/g, '&quot;');
 
           mainHtml += `
@@ -836,7 +848,7 @@
                 </div>
 
                 <div class="flex items-center gap-1.5">
-                  ${(isUserPengutang || currentUser.role === 'ADMIN') && !allApproved ? `
+                  ${currentUser && (isUserPengutang || currentUser.role === 'ADMIN') && !allApproved ? `
                     <label class="cursor-pointer px-2.5 py-1 bg-white border border-indigo-300 hover:bg-indigo-50 text-indigo-700 text-[10px] font-bold rounded-lg shadow-sm flex items-center gap-1">
                       <i class="ri-upload-2-line"></i> ${hasUploadedProof ? 'Upload Bukti Baru' : 'Upload Bukti'}
                       <input type="file" accept="image/*,application/pdf" class="hidden" onchange="handleUploadBulkProof(event, '${trip.id}', '${summary.dariEmail}', '${summary.keEmail}', ${summary.totalNominal})">
@@ -894,11 +906,11 @@
             if (!isPembayarAwal) {
               const pay = appData.payments.find(p => p.expense_id === exp.id && p.dari_email.toLowerCase() === pEmail.toLowerCase());
               const status = pay ? pay.status : 'BELUM_BAYAR';
-              const isUserYangBayarAwal = currentUser.email.toLowerCase() === exp.pembayar_email.toLowerCase();
-              const isUserPengutang = currentUser.email.toLowerCase() === pEmail.toLowerCase();
+              const isUserYangBayarAwal = currentUser && currentUser.email.toLowerCase() === exp.pembayar_email.toLowerCase();
+              const isUserPengutang = currentUser && currentUser.email.toLowerCase() === pEmail.toLowerCase();
               
               const hasChildProof = pay && pay.bukti_url && pay.bukti_url !== '';
-              const canActionChild = (currentUser.role === 'ADMIN' || isUserYangBayarAwal) && hasChildProof && status === 'PENDING_APPROVAL';
+              const canActionChild = currentUser && (currentUser.role === 'ADMIN' || isUserYangBayarAwal) && hasChildProof && status === 'PENDING_APPROVAL';
 
               mainHtml += `
                 <tr class="hover:bg-slate-50/80 transition">
@@ -927,7 +939,7 @@
                         </button>
                       ` : '<span class="text-[10px] text-slate-300 italic">Belum Ada</span>'}
 
-                      ${currentUser.role === 'ADMIN' || isUserYangBayarAwal ? `
+                      ${currentUser && (currentUser.role === 'ADMIN' || isUserYangBayarAwal) ? `
                         <label class="cursor-pointer p-1 text-slate-400 hover:text-indigo-600" title="Edit Struk Nota">
                           <i class="ri-edit-line text-xs"></i>
                           <input type="file" accept="image/*,application/pdf" class="hidden" onchange="handleEditStrukExpense(event, '${exp.id}')">
@@ -948,7 +960,7 @@
 
                   <td class="p-3 text-right">
                     <div class="flex items-center justify-end gap-1">
-                      ${(isUserPengutang || currentUser.role === 'ADMIN') && status !== 'APPROVED' ? `
+                      ${currentUser && (isUserPengutang || currentUser.role === 'ADMIN') && status !== 'APPROVED' ? `
                         <label class="cursor-pointer px-2 py-1 ${status === 'REJECTED' ? 'bg-red-50 hover:bg-red-100 text-red-700 border-red-300 animate-pulse' : 'bg-indigo-50 hover:bg-indigo-100 text-indigo-700 border-indigo-200'} font-bold text-[10px] rounded-lg border">
                           ${status === 'REJECTED' ? 'Upload Ulang Bukti' : hasChildProof ? 'Edit Bukti' : 'Upload Bukti'}
                           <input type="file" accept="image/*,application/pdf" class="hidden" onchange="handleUploadChildProof(event, '${exp.id}', '${exp.pembayar_email}', '${pEmail}', ${perOrang})">
