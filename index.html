@@ -6,54 +6,79 @@
   <title>Dashboard - Expense Tracker</title>
   <script src="https://cdn.tailwindcss.com"></script>
   <link href="https://cdn.jsdelivr.net/npm/remixicon@3.5.0/fonts/remixicon.css" rel="stylesheet">
+  <link rel="stylesheet" href="assets/css/style.css">
   <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
 </head>
-<body class="bg-slate-100 flex min-h-screen font-sans">
+<body class="bg-[#F4F6FA] flex min-h-screen font-sans text-slate-800">
 
   <!-- SIDEBAR CONTAINER -->
   <div id="sidebarContainer"></div>
 
   <!-- MAIN CONTENT -->
-  <main class="flex-1 p-8 space-y-6 overflow-y-auto">
-    <div class="flex items-center justify-between border-b pb-4 border-slate-200">
+  <main class="flex-1 p-8 space-y-8 overflow-y-auto">
+    
+    <!-- HEADER SECTION -->
+    <div class="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
       <div>
-        <h2 class="text-2xl font-extrabold text-slate-900">Dashboard & Ringkasan Saya</h2>
-        <p class="text-xs text-slate-500">Ringkasan kewajiban utang & hak piutang Anda dalam Trip/Event aktif.</p>
+        <h2 class="text-2xl font-black tracking-tight text-slate-900">Dashboard Overview</h2>
+        <p class="text-xs font-semibold text-slate-400 mt-0.5">Ringkasan kewajiban utang & hak piutang Anda pada event aktif</p>
+      </div>
+
+      <div class="flex items-center gap-3">
+        <span class="px-3 py-1.5 bg-white border border-slate-200/80 rounded-2xl text-xs font-bold text-slate-600 shadow-sm flex items-center gap-2">
+          <span class="w-2 h-2 rounded-full bg-emerald-500 animate-pulse"></span>
+          System Realtime
+        </span>
       </div>
     </div>
 
-    <!-- SUMMARY UTANG & PIUTANG CARDS -->
-    <div class="grid grid-cols-1 md:grid-cols-2 gap-5">
-      <!-- CARD PIUTANG (Uang yang harus dibayar orang lain ke saya) -->
-      <div class="bg-gradient-to-br from-emerald-500 to-teal-700 text-white p-6 rounded-3xl shadow-lg space-y-3">
+    <!-- SUMMARY METRIC CARDS (ADAPTED FROM DASHBOARD REF 1) -->
+    <div class="grid grid-cols-1 md:grid-cols-2 gap-6">
+      
+      <!-- CARD PIUTANG (BLUE ACCENT CARD) -->
+      <div class="bg-blue-600 text-white p-7 rounded-[28px] ui-card-shadow relative overflow-hidden flex flex-col justify-between space-y-4">
         <div class="flex items-center justify-between">
-          <span class="text-xs font-bold uppercase tracking-wider text-emerald-100">Total Piutang Saya</span>
-          <i class="ri-arrow-down-circle-line text-2xl text-emerald-200"></i>
+          <span class="text-xs font-bold uppercase tracking-wider text-blue-200">Total Piutang Saya</span>
+          <span class="px-2.5 py-1 bg-white/15 backdrop-blur-md rounded-full text-[11px] font-bold text-emerald-300 flex items-center gap-1">
+            <i class="ri-arrow-down-line"></i> Hak Menagih
+          </span>
         </div>
-        <p class="text-3xl font-black" id="userTotalPiutang">Rp 0</p>
-        <p class="text-[11px] text-emerald-100">Total uang yang harus dibayarkan anggota lain kepada Anda.</p>
+        <div>
+          <p class="text-4xl font-extrabold tracking-tight" id="userTotalPiutang">Rp 0</p>
+          <p class="text-xs text-blue-100 mt-2 font-medium">Total dana yang harus dibayarkan peserta lain kepada Anda</p>
+        </div>
       </div>
 
-      <!-- CARD UTANG (Uang yang harus saya bayar ke orang lain) -->
-      <div class="bg-gradient-to-br from-rose-500 to-red-700 text-white p-6 rounded-3xl shadow-lg space-y-3">
+      <!-- CARD UTANG (CYAN TO TEAL GRADIENT CARD) -->
+      <div class="bg-white p-7 rounded-[28px] border border-slate-200/70 ui-card-shadow flex flex-col justify-between space-y-4">
         <div class="flex items-center justify-between">
-          <span class="text-xs font-bold uppercase tracking-wider text-rose-100">Total Utang Saya</span>
-          <i class="ri-arrow-up-circle-line text-2xl text-rose-200"></i>
+          <span class="text-xs font-bold uppercase tracking-wider text-slate-400">Total Utang Saya</span>
+          <span class="px-2.5 py-1 bg-rose-50 rounded-full text-[11px] font-bold text-rose-600 flex items-center gap-1">
+            <i class="ri-arrow-up-line"></i> Kewajiban Bayar
+          </span>
         </div>
-        <p class="text-3xl font-black" id="userTotalUtang">Rp 0</p>
-        <p class="text-[11px] text-rose-100">Total tagihan yang wajib Anda lunasi ke pembayar awal.</p>
+        <div>
+          <p class="text-4xl font-extrabold tracking-tight text-slate-900" id="userTotalUtang">Rp 0</p>
+          <p class="text-xs text-slate-400 mt-2 font-medium">Total tagihan yang belum Anda pelajari/lunasi ke pembayar awal</p>
+        </div>
       </div>
+
     </div>
 
-    <!-- RINCIAN UTANG/PIUTANG PER ANGGOTA -->
-    <div class="bg-white p-6 rounded-3xl shadow-sm border border-slate-200 space-y-4">
-      <h3 class="font-extrabold text-slate-800 text-base flex items-center gap-2">
-        <i class="ri-user-unfollow-line text-indigo-600"></i> Rincian Tagihan Per Orang
-      </h3>
+    <!-- BREAKDOWN TABLE / LIST CARD -->
+    <div class="bg-white p-7 rounded-[28px] border border-slate-200/70 ui-card-shadow space-y-5">
+      <div class="flex items-center justify-between border-b border-slate-100 pb-4">
+        <div>
+          <h3 class="font-extrabold text-slate-900 text-base">Rincian Tagihan Per Anggota</h3>
+          <p class="text-xs text-slate-400">Detail kalkulasi pasangan transaksi antar anggota</p>
+        </div>
+      </div>
+
       <div id="userSummaryBreakdown" class="divide-y divide-slate-100">
         <!-- Rendered by JS -->
       </div>
     </div>
+
   </main>
 
   <script src="assets/js/supabase-client.js"></script>
@@ -83,18 +108,15 @@
         exp.peserta_emails.forEach(pEmail => {
           const peserta = pEmail.toLowerCase();
           if (peserta !== pembayar) {
-            // Cek status bayar
             const pay = (payments || []).find(p => p.expense_id === exp.id && p.dari_email.toLowerCase() === peserta);
             const isLunas = pay && pay.status === 'APPROVED';
 
             if (!isLunas) {
               if (pembayar === user.email.toLowerCase()) {
-                // Saya adalah pembayar awal -> Ini PIUTANG saya
                 totalPiutang += perOrang;
                 if (!breakdownMap[peserta]) breakdownMap[peserta] = { piutang: 0, utang: 0 };
                 breakdownMap[peserta].piutang += perOrang;
               } else if (peserta === user.email.toLowerCase()) {
-                // Saya adalah peserta yang ikut -> Ini UTANG saya
                 totalUtang += perOrang;
                 if (!breakdownMap[pembayar]) breakdownMap[pembayar] = { piutang: 0, utang: 0 };
                 breakdownMap[pembayar].utang += perOrang;
@@ -111,7 +133,7 @@
       const keys = Object.keys(breakdownMap);
 
       if (keys.length === 0) {
-        container.innerHTML = `<p class="py-4 text-xs text-slate-400 italic">Anda tidak memiliki utang atau piutang aktif saat ini.</p>`;
+        container.innerHTML = `<p class="py-6 text-center text-xs text-slate-400 font-medium">Anda tidak memiliki kewajiban utang atau hak piutang aktif saat ini.</p>`;
         return;
       }
 
@@ -120,17 +142,22 @@
         const selisih = item.piutang - item.utang;
 
         return `
-          <div class="py-3.5 flex items-center justify-between text-xs">
-            <div>
-              <p class="font-bold text-slate-800">${email}</p>
-              <p class="text-[11px] text-slate-400">Piutang: Rp ${item.piutang.toLocaleString('id-ID')} | Utang: Rp ${item.utang.toLocaleString('id-ID')}</p>
+          <div class="py-4 flex items-center justify-between text-xs">
+            <div class="flex items-center gap-3">
+              <div class="w-8 h-8 rounded-full bg-slate-100 flex items-center justify-center font-bold text-slate-600 uppercase text-[11px]">
+                ${email.charAt(0)}
+              </div>
+              <div>
+                <p class="font-bold text-slate-900">${email}</p>
+                <p class="text-[11px] text-slate-400 font-medium">Piutang: Rp ${item.piutang.toLocaleString('id-ID')} • Utang: Rp ${item.utang.toLocaleString('id-ID')}</p>
+              </div>
             </div>
             <div class="text-right font-extrabold">
               ${selisih > 0 
-                ? `<span class="text-emerald-600 bg-emerald-50 px-3 py-1 rounded-full">+ Menagih Rp ${selisih.toLocaleString('id-ID')}</span>`
+                ? `<span class="text-emerald-600 bg-emerald-50 border border-emerald-200/60 px-3.5 py-1.5 rounded-full font-bold text-[11px] inline-flex items-center gap-1">+ Menagih Rp ${selisih.toLocaleString('id-ID')}</span>`
                 : selisih < 0 
-                ? `<span class="text-rose-600 bg-rose-50 px-3 py-1 rounded-full">- Harus Bayar Rp ${Math.abs(selisih).toLocaleString('id-ID')}</span>`
-                : `<span class="text-slate-500">Lunas / Impas</span>`}
+                ? `<span class="text-rose-600 bg-rose-50 border border-rose-200/60 px-3.5 py-1.5 rounded-full font-bold text-[11px] inline-flex items-center gap-1">- Harus Bayar Rp ${Math.abs(selisih).toLocaleString('id-ID')}</span>`
+                : `<span class="text-slate-500 bg-slate-100 px-3.5 py-1.5 rounded-full text-[11px]">Lunas / Impas</span>`}
             </div>
           </div>
         `;
