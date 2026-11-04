@@ -35,11 +35,17 @@
   <script src="assets/js/auth-guard.js"></script>
   <script>
     async function loginGoogle() {
-      const redirectUri = window.location.origin + '/index.html';
-      await db.auth.signInWithOAuth({
+      // Mengambil URL asal lengkap beserta nama repository/folder di GitHub Pages
+          const redirectUri = window.location.origin + window.location.pathname.replace('login.html', 'index.html');
+  
+          const { error } = await db.auth.signInWithOAuth({
         provider: 'google',
-        options: { redirectTo: redirectUri }
-      });
+        options: { 
+        redirectTo: redirectUri 
+        }
+        });
+  
+      if (error) alert('Gagal login: ' + error.message);
     }
 
     // Jika sudah punya session valid, langsung lempar ke index
