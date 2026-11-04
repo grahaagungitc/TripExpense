@@ -1,16 +1,35 @@
-@import url('https://fonts.googleapis.com/css2?family=Plus+Jakarta+Sans:wght@400;500;600;700;800&display=swap');
+@import url('https://fonts.googleapis.com/css2?family=Comfortaa:wght@600;700&family=Nunito:ital,wght@0,400;0,600;0,700;0,800;0,900;1,700&display=swap');
 
 :root {
   --bg-app: #f4f6fa;
-  --card-bg: #ffffff;
   --accent-blue: #2563eb;
-  --accent-dark-blue: #1e40af;
 }
 
 body {
-  font-family: 'Plus Jakarta Sans', -apple-system, BlinkMacSystemFont, sans-serif;
+  font-family: 'Nunito', -apple-system, BlinkMacSystemFont, sans-serif;
   background-color: var(--bg-app);
   color: #1e293b;
+}
+
+/* Comfortaa untuk Brand & Heading Utama */
+h1, h2, h3, .brand-font {
+  font-family: 'Comfortaa', cursive, sans-serif;
+}
+
+/* Soft Fade-in Transition untuk Konten Halaman */
+.view-animate-enter {
+  animation: fadeInSeamless 0.25s cubic-bezier(0.16, 1, 0.3, 1) forwards;
+}
+
+@keyframes fadeInSeamless {
+  from {
+    opacity: 0;
+    transform: translateY(6px);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
 }
 
 /* Custom Scrollbar */
@@ -18,22 +37,16 @@ body {
   width: 6px;
   height: 6px;
 }
-
 .custom-scrollbar::-webkit-scrollbar-track {
   background: #f1f5f9;
   border-radius: 10px;
 }
-
 .custom-scrollbar::-webkit-scrollbar-thumb {
   background: #cbd5e1;
   border-radius: 10px;
 }
 
-.custom-scrollbar::-webkit-scrollbar-thumb:hover {
-  background: #94a3b8;
-}
-
-/* Soft Shadow UI */
+/* Shadow Custom */
 .ui-card-shadow {
   box-shadow: 0 10px 30px -5px rgba(0, 0, 0, 0.04), 0 4px 12px -2px rgba(0, 0, 0, 0.02);
 }
