@@ -6,7 +6,6 @@ let appData = { users: [], trips: [], categories: [], expenses: [], payments: []
 // 0. STRICT AUTHENTICATION GUARD & INITIALIZATION
 // -------------------------------------------------------------
 window.addEventListener('DOMContentLoaded', async () => {
-  // 1. Ambil session aktif dari Supabase Auth
   const { data: { session }, error: sessionError } = await db.auth.getSession();
   
   if (sessionError || !session || !session.user) {
@@ -21,7 +20,6 @@ window.addEventListener('DOMContentLoaded', async () => {
     return;
   }
 
-  // 2. Query tabel public.users untuk verifikasi email
   try {
     const { data: userRecord, error: dbError } = await db
       .from('users')
@@ -29,20 +27,17 @@ window.addEventListener('DOMContentLoaded', async () => {
       .ilike('email', email)
       .maybeSingle();
 
-    // Jika terjadi error DB atau email TIDAK TERDAFTAR di tabel users
     if (dbError || !userRecord) {
       console.warn(`[SECURITY GUARD] Akses ditolak untuk email: ${email}`);
       await forceLogoutAndRedirect(`Akses Ditolak: Email (${email}) belum terdaftar di sistem. Hubungi Admin!`);
       return;
     }
 
-    // Jika status akun di-SET INACTIVE oleh Admin
     if (userRecord.status === 'INACTIVE') {
       await forceLogoutAndRedirect(`Akses Ditolak: Akun Anda (${email}) sedang dinonaktifkan oleh Admin.`);
       return;
     }
 
-    // 3. User lolos verifikasi -> Simpan state & jalankan aplikasi
     currentUser = userRecord;
     localStorage.setItem('gh_user_session', JSON.stringify(currentUser));
     
@@ -57,7 +52,6 @@ window.addEventListener('DOMContentLoaded', async () => {
   }
 });
 
-// FUNGSI HARD CLEANUP & REDIRECT
 async function forceLogoutAndRedirect(errorMessage = null) {
   hideLoader();
   localStorage.removeItem('gh_user_session');
@@ -108,7 +102,8 @@ async function refreshAppData() {
   appData.payments = payments || [];
 
   if (!appData.selectedTripId && appData.trips.length > 0) {
-    appData.selectedTripId = appData.trips[appData.trips.length - 1].id;
+    const activeTrips = appData.trips.filter(t => t.status !== 'INACTIVE');
+    appData.selectedTripId = activeTrips.length > 0 ? activeTrips[activeTrips.length - 1].id : appData.trips[0].id;
   }
 }
 
@@ -136,7 +131,7 @@ function navigateTo(viewName) {
 
   const container = document.getElementById('mainContentView');
   container.classList.remove('view-animate-enter');
-  void container.offsetWidth; // Trigger reflow for animation
+  void container.offsetWidth;
   container.classList.add('view-animate-enter');
 
   if (viewName === 'dashboard') renderDashboardView();
@@ -147,14 +142,14 @@ function navigateTo(viewName) {
 }
 
 // -------------------------------------------------------------
-// 1. DASHBOARD VIEW (DENGAN DATA KATEGORI & AKUMULASI DANA)
+// 1. DASHBOARD VIEW
 // -------------------------------------------------------------
 function renderDashboardView() {
   const selectedTrip = appData.trips.find(t => t.id === appData.selectedTripId) || appData.trips[0];
   const tripExpenses = appData.expenses.filter(e => selectedTrip && e.trip_id === selectedTrip.id);
   
   const totalEventNominal = tripExpenses.reduce((sum, e) => sum + parseFloat(e.nominal || 0), 0);
-  const activeParticipantsCount = (selectedTrip && selectedTrip.active_participant_emails) ? selectedTrip.active_participant_emails.length : appData.users.length;
+  const activeParticipantsCount = (selectedTrip && selectedTrip.active_participant_emails) ? selectedTrip.active_participant_emails.length : appData.users.filter(u => u.status !== 'INACTIVE').length;
   const avgPerPerson = activeParticipantsCount > 0 ? (totalEventNominal / activeParticipantsCount) : 0;
 
   let totalPiutang = 0;
@@ -202,7 +197,7 @@ function renderDashboardView() {
       <div class="flex items-center gap-3">
         <label class="text-xs font-bold text-slate-500">Pilih Event:</label>
         <select onchange="onDashboardTripChange(this.value)" class="px-4 py-2 bg-white border border-slate-200 rounded-2xl text-xs font-extrabold text-blue-600 shadow-sm focus:outline-none">
-          ${appData.trips.map(t => `<option value="${t.id}" ${selectedTrip && selectedTrip.id === t.id ? 'selected' : ''}>${t.judul}</option>`).join('')}
+          ${appData.trips.map(t => `<option value="${t.id}" ${selectedTrip && selectedTrip.id === t.id ? 'selected' : ''}>${t.judul} ${t.status === 'INACTIVE' ? '(Nonaktif)' : ''}</option>`).join('')}
         </select>
       </div>
     </div>
@@ -229,7 +224,7 @@ function renderDashboardView() {
       <div class="bg-white p-6 rounded-[24px] border border-slate-200/70 ui-card-shadow space-y-2">
         <span class="text-[10px] font-extrabold uppercase tracking-wider text-slate-400">Estimasi Rata-rata / Orang</span>
         <p class="text-3xl font-black text-emerald-600">${'Rp ' + Math.round(avgPerPerson).toLocaleString('id-ID')}</p>
-        <p class="text-[11px] text-slate-400 font-semibold">${activeParticipantsCount} Anggota berpartisipasi</p>
+        <p class="text-[11px] text-slate-400 font-semibold">${activeParticipantsCount} Anggota aktif</p>
       </div>
     </div>
 
@@ -303,6 +298,7 @@ function onDashboardTripChange(tripId) {
 // 2. INPUT EXPENSE VIEW
 // -------------------------------------------------------------
 function renderExpenseView() {
+  const activeTrips = appData.trips.filter(t => t.status !== 'INACTIVE');
   const activeUsers = appData.users.filter(u => u.status !== 'INACTIVE');
   const activeCategories = appData.categories.filter(c => c.status !== 'INACTIVE');
 
@@ -318,7 +314,7 @@ function renderExpenseView() {
           <div class="space-y-1">
             <label class="text-xs font-bold text-slate-700 uppercase">Judul Trip / Event</label>
             <select id="expTripSelect" onchange="onTripSelectChangeSPA(this.value)" required class="w-full px-4 py-2.5 text-xs border border-slate-200 rounded-xl font-bold text-blue-600 bg-slate-50 focus:outline-none">
-              ${appData.trips.map(t => `<option value="${t.id}" ${appData.selectedTripId === t.id ? 'selected' : ''}>${t.judul}</option>`).join('')}
+              ${activeTrips.map(t => `<option value="${t.id}" ${appData.selectedTripId === t.id ? 'selected' : ''}>${t.judul}</option>`).join('')}
             </select>
           </div>
           <div class="space-y-1">
@@ -392,7 +388,10 @@ function renderExpenseView() {
   `;
 
   document.getElementById('mainContentView').innerHTML = html;
-  onTripSelectChangeSPA(document.getElementById('expTripSelect').value);
+  const expTripSelect = document.getElementById('expTripSelect');
+  if (expTripSelect && expTripSelect.value) {
+    onTripSelectChangeSPA(expTripSelect.value);
+  }
 }
 
 function onTripSelectChangeSPA(tripId) {
@@ -472,7 +471,7 @@ function renderSettlementView() {
     return `
       <div class="bg-white p-7 rounded-[24px] border border-slate-200/70 ui-card-shadow space-y-4">
         <div class="flex items-center justify-between border-b border-slate-100 pb-3">
-          <h3 class="font-extrabold text-slate-900 text-sm brand-font">${trip.judul}</h3>
+          <h3 class="font-extrabold text-slate-900 text-sm brand-font">${trip.judul} ${trip.status === 'INACTIVE' ? '<span class="text-[10px] text-rose-500 font-bold ml-1">(Nonaktif)</span>' : ''}</h3>
           <span class="text-xs font-bold text-slate-400">${tripExpenses.length} Sub-Expense</span>
         </div>
         <div class="grid grid-cols-1 md:grid-cols-2 gap-4">
@@ -578,7 +577,7 @@ async function renderLogsView() {
 }
 
 // -------------------------------------------------------------
-// 5. MASTER SETUP VIEW (LENGKAP: TRIP, USER, CATEGORY - CRUD & STATUS)
+// 5. MASTER SETUP VIEW (WITH DATA INTEGRITY GUARDS & STATUS TOGGLES)
 // -------------------------------------------------------------
 function renderSetupView() {
   document.getElementById('mainContentView').innerHTML = `
@@ -599,20 +598,24 @@ function renderSetupView() {
         <div class="space-y-2">
           ${appData.trips.length === 0 
             ? `<p class="text-xs text-slate-400 italic">Belum ada trip.</p>`
-            : appData.trips.map(t => `
-                <div class="p-3 bg-slate-50 border border-slate-200/80 rounded-2xl text-xs flex justify-between items-center">
-                  <span class="font-bold text-slate-800">${t.judul}</span>
-                  <div class="flex items-center gap-2">
-                    <button onclick="handleEditTripSPA('${t.id}', '${t.judul.replace(/'/g, "\\'")}')" class="px-2.5 py-1 bg-white border border-slate-300 hover:bg-slate-100 text-slate-700 rounded-lg text-[10px] font-bold">Edit</button>
-                    <button onclick="handleDeleteTripSPA('${t.id}')" class="px-2.5 py-1 bg-rose-50 text-rose-600 hover:bg-rose-100 rounded-lg text-[10px] font-bold">Hapus</button>
+            : appData.trips.map(t => {
+                const isInactive = t.status === 'INACTIVE';
+                return `
+                  <div class="p-3 bg-slate-50 border border-slate-200/80 rounded-2xl text-xs flex justify-between items-center ${isInactive ? 'opacity-60' : ''}">
+                    <span class="font-bold text-slate-800">${t.judul} ${isInactive ? '<span class="text-[9px] px-2 py-0.5 bg-rose-100 text-rose-700 rounded-full font-bold ml-1">INACTIVE</span>' : ''}</span>
+                    <div class="flex items-center gap-1.5 shrink-0">
+                      <button onclick="handleEditTripSPA('${t.id}', '${t.judul.replace(/'/g, "\\'")}')" class="px-2.5 py-1 bg-white border border-slate-300 hover:bg-slate-100 text-slate-700 rounded-lg text-[10px] font-bold">Edit</button>
+                      <button onclick="handleToggleTripStatusSPA('${t.id}', '${t.status || 'ACTIVE'}')" class="px-2.5 py-1 ${isInactive ? 'bg-emerald-50 text-emerald-600 border border-emerald-200' : 'bg-amber-50 text-amber-700 border border-amber-200'} rounded-lg text-[10px] font-bold">${isInactive ? 'Aktifkan' : 'Nonaktif'}</button>
+                      <button onclick="handleDeleteTripSPA('${t.id}', '${t.judul.replace(/'/g, "\\'")}')" class="px-2.5 py-1 bg-rose-50 border border-rose-200 text-rose-600 hover:bg-rose-100 rounded-lg text-[10px] font-bold">Hapus</button>
+                    </div>
                   </div>
-                </div>
-              `).join('')}
+                `;
+              }).join('')}
         </div>
       </div>
     </section>
 
-    <!-- 2. USER MANAGEMENT -->
+    <!-- 2. USER MANAGEMENT (UI FIXED FOR ACCORDION / BUTTON FIT) -->
     <section class="bg-white p-7 rounded-[24px] border border-slate-200/70 ui-card-shadow space-y-4">
       <h3 class="text-xs font-bold uppercase text-slate-700">2. Tambah & Kelola User Sistem</h3>
       <div class="grid grid-cols-1 sm:grid-cols-3 gap-3">
@@ -628,21 +631,21 @@ function renderSetupView() {
       </div>
       <div class="pt-2">
         <p class="text-[11px] font-bold text-slate-400 uppercase tracking-wider mb-2">Daftar User Terdaftar Database:</p>
-        <div class="grid grid-cols-1 sm:grid-cols-2 gap-3">
+        <div class="grid grid-cols-1 lg:grid-cols-2 gap-3">
           ${appData.users.length === 0 
             ? `<p class="text-xs text-slate-400 italic">Belum ada user di database.</p>`
             : appData.users.map(u => {
                 const isInactive = u.status === 'INACTIVE';
                 return `
-                  <div class="p-3 bg-slate-50 border border-slate-200/80 rounded-2xl text-xs flex justify-between items-center ${isInactive ? 'opacity-60' : ''}">
-                    <div>
-                      <p class="font-bold text-slate-900">${u.nama} <span class="text-[9px] px-2 py-0.5 bg-blue-100 text-blue-700 rounded-full font-bold ml-1">${u.role}</span> ${isInactive ? '<span class="text-[9px] px-2 py-0.5 bg-rose-100 text-rose-700 rounded-full font-bold">INACTIVE</span>' : ''}</p>
-                      <p class="text-[10px] text-slate-400 mt-0.5">${u.email}</p>
+                  <div class="p-3.5 bg-slate-50 border border-slate-200/80 rounded-2xl text-xs flex flex-wrap sm:flex-nowrap items-center justify-between gap-3 ${isInactive ? 'opacity-60' : ''}">
+                    <div class="min-w-0 flex-1">
+                      <p class="font-bold text-slate-900 truncate">${u.nama} <span class="text-[9px] px-2 py-0.5 bg-blue-100 text-blue-700 rounded-full font-bold ml-1">${u.role}</span> ${isInactive ? '<span class="text-[9px] px-2 py-0.5 bg-rose-100 text-rose-700 rounded-full font-bold">INACTIVE</span>' : ''}</p>
+                      <p class="text-[10px] text-slate-400 truncate mt-0.5">${u.email}</p>
                     </div>
-                    <div class="flex items-center gap-1.5">
-                      <button onclick="handleEditUserSPA('${u.id}', '${u.nama.replace(/'/g, "\\'")}', '${u.role}')" class="px-2 py-1 bg-white border border-slate-300 hover:bg-slate-100 text-slate-700 rounded-lg text-[10px] font-bold">Edit</button>
-                      <button onclick="handleToggleUserStatusSPA('${u.id}', '${u.status || 'ACTIVE'}')" class="px-2 py-1 ${isInactive ? 'bg-emerald-50 text-emerald-600' : 'bg-amber-50 text-amber-700'} rounded-lg text-[10px] font-bold">${isInactive ? 'Aktifkan' : 'Nonaktif'}</button>
-                      <button onclick="handleDeleteUserSPA('${u.id}')" class="px-2 py-1 bg-rose-50 text-rose-600 hover:bg-rose-100 rounded-lg text-[10px] font-bold">Hapus</button>
+                    <div class="flex items-center gap-1.5 shrink-0">
+                      <button onclick="handleEditUserSPA('${u.id}', '${u.nama.replace(/'/g, "\\'")}', '${u.role}')" class="px-2.5 py-1 bg-white border border-slate-300 hover:bg-slate-100 text-slate-700 rounded-lg text-[10px] font-bold">Edit</button>
+                      <button onclick="handleToggleUserStatusSPA('${u.id}', '${u.status || 'ACTIVE'}')" class="px-2.5 py-1 ${isInactive ? 'bg-emerald-50 text-emerald-600 border border-emerald-200' : 'bg-amber-50 text-amber-700 border border-amber-200'} rounded-lg text-[10px] font-bold">${isInactive ? 'Aktifkan' : 'Nonaktif'}</button>
+                      <button onclick="handleDeleteUserSPA('${u.id}', '${u.email}')" class="px-2.5 py-1 bg-rose-50 border border-rose-200 text-rose-600 hover:bg-rose-100 rounded-lg text-[10px] font-bold">Hapus</button>
                     </div>
                   </div>
                 `;
@@ -660,27 +663,39 @@ function renderSetupView() {
       </div>
       <div class="pt-2">
         <p class="text-[11px] font-bold text-slate-400 uppercase tracking-wider mb-2">Daftar Kategori Terdaftar:</p>
-        <div class="flex flex-wrap gap-2">
+        <div class="flex flex-wrap gap-2.5">
           ${appData.categories.length === 0
             ? `<p class="text-xs text-slate-400 italic">Belum ada kategori kustom.</p>`
-            : appData.categories.map(c => `
-                <div class="px-3 py-1.5 bg-slate-50 border border-slate-200 rounded-xl text-xs font-bold text-slate-700 flex items-center gap-2">
-                  <span>${c.nama}</span>
-                  <button onclick="handleDeleteCategorySPA('${c.id}')" class="text-rose-500 hover:text-rose-700 text-xs"><i class="ri-close-circle-fill"></i></button>
-                </div>
-              `).join('')}
+            : appData.categories.map(c => {
+                const isInactive = c.status === 'INACTIVE';
+                return `
+                  <div class="px-3.5 py-1.5 bg-slate-50 border border-slate-200 rounded-xl text-xs font-bold text-slate-700 flex items-center gap-2 ${isInactive ? 'opacity-50' : ''}">
+                    <span>${c.nama} ${isInactive ? '(Nonaktif)' : ''}</span>
+                    <button onclick="handleToggleCategoryStatusSPA('${c.id}', '${c.status || 'ACTIVE'}')" class="text-[10px] px-1.5 py-0.5 rounded ${isInactive ? 'bg-emerald-100 text-emerald-700' : 'bg-amber-100 text-amber-800'}" title="Toggle Active Status">
+                      ${isInactive ? 'Aktifkan' : 'Nonaktif'}
+                    </button>
+                    <button onclick="handleDeleteCategorySPA('${c.id}', '${c.nama.replace(/'/g, "\\'")}')" class="text-rose-500 hover:text-rose-700 text-xs ml-1" title="Hapus Permanen">
+                      <i class="ri-close-circle-fill"></i>
+                    </button>
+                  </div>
+                `;
+              }).join('')}
         </div>
       </div>
     </section>
   `;
 }
 
-// HANDLERS UNTUK SETUP MASTER
+// -------------------------------------------------------------
+// LOGIKA SELEKTIF HAPUS VS NONAKTIFKAN (DATA INTEGRITY)
+// -------------------------------------------------------------
+
+// TRIP HANDLERS
 async function handleCreateTripSPA() {
   const judul = document.getElementById('newTripTitle').value.trim();
   if (!judul) return alert('Masukkan judul trip!');
 
-  const { error } = await db.from('trips').insert([{ judul, created_by: currentUser.email }]);
+  const { error } = await db.from('trips').insert([{ judul, created_by: currentUser.email, status: 'ACTIVE' }]);
   if (error) return alert('Gagal membuat trip: ' + error.message);
 
   await db.from('activity_logs').insert([{ user_email: currentUser.email, action: 'CREATE_TRIP', details: `Membuat trip: ${judul}` }]);
@@ -701,17 +716,36 @@ async function handleEditTripSPA(id, oldJudul) {
   renderSetupView();
 }
 
-async function handleDeleteTripSPA(id) {
-  if (!confirm('Apakah Anda yakin ingin menghapus trip ini?')) return;
+async function handleToggleTripStatusSPA(id, currentStatus) {
+  const targetStatus = currentStatus === 'INACTIVE' ? 'ACTIVE' : 'INACTIVE';
+  const { error } = await db.from('trips').update({ status: targetStatus }).eq('id', id);
+  if (error) return alert('Gagal mengubah status trip: ' + error.message);
 
-  const { error } = await db.from('trips').delete().eq('id', id);
-  if (error) return alert('Gagal menghapus trip: ' + error.message);
-
-  await db.from('activity_logs').insert([{ user_email: currentUser.email, action: 'DELETE_TRIP', details: `Menghapus trip ID: ${id}` }]);
+  await db.from('activity_logs').insert([{ user_email: currentUser.email, action: 'TOGGLE_TRIP_STATUS', details: `Mengubah status trip ID: ${id} menjadi ${targetStatus}` }]);
   await refreshAppData();
   renderSetupView();
 }
 
+async function handleDeleteTripSPA(id, judulTrip) {
+  // Cek apakah Trip sudah dipakai di tabel expenses
+  const isUsed = appData.expenses.some(e => e.trip_id === id);
+
+  if (isUsed) {
+    alert(`Gagal Menghapus: Trip "${judulTrip}" sudah memiliki riwayat transaksi!\n\nUntuk menjaga keutuhan laporan keuangan, Trip ini tidak bisa dihapus. Silakan gunakan tombol 'Nonaktif' agar tidak muncul lagi pada form input.`);
+    return;
+  }
+
+  if (!confirm(`Apakah Anda yakin ingin menghapus permanen Trip "${judulTrip}"?`)) return;
+
+  const { error } = await db.from('trips').delete().eq('id', id);
+  if (error) return alert('Gagal menghapus trip: ' + error.message);
+
+  await db.from('activity_logs').insert([{ user_email: currentUser.email, action: 'DELETE_TRIP', details: `Menghapus trip: ${judulTrip}` }]);
+  await refreshAppData();
+  renderSetupView();
+}
+
+// USER HANDLERS
 async function handleAddUserSPA() {
   const nama = document.getElementById('newUserName').value.trim();
   const email = document.getElementById('newUserEmail').value.trim().toLowerCase();
@@ -753,22 +787,32 @@ async function handleToggleUserStatusSPA(id, currentStatus) {
   renderSetupView();
 }
 
-async function handleDeleteUserSPA(id) {
-  if (!confirm('Apakah Anda yakin ingin menghapus user ini dari database?')) return;
+async function handleDeleteUserSPA(id, emailUser) {
+  // Cek apakah email user sudah dipakai sebagai pembayar atau peserta di expenses
+  const isUsedAsPembayar = appData.expenses.some(e => e.pembayar_email.toLowerCase() === emailUser.toLowerCase());
+  const isUsedAsPeserta = appData.expenses.some(e => (e.peserta_emails || []).some(p => p.toLowerCase() === emailUser.toLowerCase()));
+
+  if (isUsedAsPembayar || isUsedAsPeserta) {
+    alert(`Gagal Menghapus: User (${emailUser}) sudah memiliki riwayat transaksi/split expense!\n\nUser ini tidak boleh dihapus agar riwayat pembagian tagihan tetap akurat. Silakan gunakan tombol 'Nonaktif' untuk memblokir akses login & menyembunyikannya dari pilihan peserta.`);
+    return;
+  }
+
+  if (!confirm(`Apakah Anda yakin ingin menghapus permanen user ${emailUser} dari database?`)) return;
 
   const { error } = await db.from('users').delete().eq('id', id);
   if (error) return alert('Gagal menghapus user: ' + error.message);
 
-  await db.from('activity_logs').insert([{ user_email: currentUser.email, action: 'DELETE_USER', details: `Menghapus user ID: ${id}` }]);
+  await db.from('activity_logs').insert([{ user_email: currentUser.email, action: 'DELETE_USER', details: `Menghapus user: ${emailUser}` }]);
   await refreshAppData();
   renderSetupView();
 }
 
+// CATEGORY HANDLERS
 async function handleAddCategorySPA() {
   const nama = document.getElementById('newCategoryName').value.trim();
   if (!nama) return alert('Masukkan nama kategori!');
 
-  const { error } = await db.from('categories').insert([{ nama }]);
+  const { error } = await db.from('categories').insert([{ nama, status: 'ACTIVE' }]);
   if (error) return alert('Gagal menambah kategori: ' + error.message);
 
   await db.from('activity_logs').insert([{ user_email: currentUser.email, action: 'ADD_CATEGORY', details: `Menambahkan kategori: ${nama}` }]);
@@ -777,13 +821,30 @@ async function handleAddCategorySPA() {
   renderSetupView();
 }
 
-async function handleDeleteCategorySPA(id) {
-  if (!confirm('Hapus kategori ini?')) return;
+async function handleToggleCategoryStatusSPA(id, currentStatus) {
+  const targetStatus = currentStatus === 'INACTIVE' ? 'ACTIVE' : 'INACTIVE';
+  const { error } = await db.from('categories').update({ status: targetStatus }).eq('id', id);
+  if (error) return alert('Gagal mengubah status kategori: ' + error.message);
+
+  await refreshAppData();
+  renderSetupView();
+}
+
+async function handleDeleteCategorySPA(id, namaKategori) {
+  // Cek apakah Kategori sudah pernah dipakai di expenses
+  const isUsed = appData.expenses.some(e => (e.kategori || '').toLowerCase() === namaKategori.toLowerCase());
+
+  if (isUsed) {
+    alert(`Gagal Menghapus: Kategori "${namaKategori}" sudah terikat pada transaksi pengeluaran!\n\nGunakan tombol 'Nonaktif' agar kategori ini tidak muncul lagi di pilihan form input.`);
+    return;
+  }
+
+  if (!confirm(`Hapus permanen kategori "${namaKategori}"?`)) return;
 
   const { error } = await db.from('categories').delete().eq('id', id);
   if (error) return alert('Gagal menghapus kategori: ' + error.message);
 
-  await db.from('activity_logs').insert([{ user_email: currentUser.email, action: 'DELETE_CATEGORY', details: `Menghapus kategori ID: ${id}` }]);
+  await db.from('activity_logs').insert([{ user_email: currentUser.email, action: 'DELETE_CATEGORY', details: `Menghapus kategori: ${namaKategori}` }]);
   await refreshAppData();
   renderSetupView();
 }
