@@ -35,14 +35,13 @@
   <script src="assets/js/auth-guard.js"></script>
   <script>
     async function loginGoogle() {
-      // Mengambil URL asal lengkap beserta nama repository/folder di GitHub Pages
-          const redirectUri = window.location.origin + window.location.pathname.replace('login.html', 'index.html');
-  
-          const { error } = await db.auth.signInWithOAuth({
-        provider: 'google',
-        options: { 
-        redirectTo: redirectUri 
-        }
+  const redirectUri = window.location.origin + window.location.pathname.replace('login.html', 'app.html');
+
+  await db.auth.signInWithOAuth({
+    provider: 'google',
+    options: { redirectTo: redirectUri }
+    });
+  }
         });
   
       if (error) alert('Gagal login: ' + error.message);
