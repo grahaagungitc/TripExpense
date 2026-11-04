@@ -16,6 +16,12 @@
 </head>
 <body class="bg-slate-100 text-slate-800 font-sans min-h-screen">
 
+  <!-- GLOBAL LOADING SCREEN -->
+  <div id="loadingScreen" class="fixed inset-0 bg-slate-900/80 backdrop-blur-sm z-[110] flex flex-col items-center justify-center text-white space-y-4">
+    <div class="w-12 h-12 border-4 border-indigo-400 border-t-transparent rounded-full animate-spin"></div>
+    <p class="text-sm font-semibold tracking-wide" id="loadingText">Memverifikasi Otentikasi...</p>
+  </div>
+
   <!-- CUSTOM TOAST NOTIFICATION -->
   <div id="toastContainer" class="fixed top-5 right-5 z-[100] space-y-2 pointer-events-none"></div>
 
@@ -89,7 +95,7 @@
   </div>
 
   <!-- SCREEN 1: SIGN IN (STRICT AUTHENTICATION) -->
-  <div id="loginScreen" class="min-h-screen flex flex-col justify-between items-center p-4">
+  <div id="loginScreen" class="hidden min-h-screen flex flex-col justify-between items-center p-4">
     <div class="w-full max-w-md my-auto space-y-6">
       <div class="flex items-center justify-center space-x-3 mb-6">
         <div class="w-12 h-12 bg-indigo-600 rounded-2xl flex items-center justify-center text-white text-2xl shadow-lg shadow-indigo-200">
@@ -372,6 +378,13 @@
     let currentUser = null;
     let appData = { users: [], trips: [], categories: [], activeTrip: null, expenses: [], payments: [] };
 
+    function showLoading(show = true, text = "Memverifikasi Otentikasi...") {
+      const loader = document.getElementById('loadingScreen');
+      document.getElementById('loadingText').innerText = text;
+      if (show) loader.classList.remove('hidden');
+      else loader.classList.add('hidden');
+    }
+
     function showToast(message, type = 'info') {
       const container = document.getElementById('toastContainer');
       const toast = document.createElement('div');
@@ -518,12 +531,16 @@
       return u ? u.nama : email.split('@')[0];
     }
 
+    // INITIALIZATION & SESSION CHECK
     window.addEventListener('DOMContentLoaded', async function() {
+      showLoading(true, "Memeriksa Sesi Pengguna...");
+
       db.auth.onAuthStateChange(async (event, session) => {
-        if ((event === 'SIGNED_IN' || event === 'INITIAL_SESSION') && session) {
+        if (event === 'SIGNED_IN' && session && session.user) {
           await processAuthUser(session.user);
         } else if (event === 'SIGNED_OUT') {
           doLogoutClean();
+          showLoading(false);
         }
       });
 
@@ -532,27 +549,33 @@
         await processAuthUser(session.user);
       } else {
         doLogoutClean();
+        showLoading(false);
       }
     });
 
     async function loginWithGoogle() {
-      localStorage.removeItem('gh_user_session');
+      doLogoutClean();
+      showLoading(true, "Mengarahkan ke Google...");
       const redirectUri = window.location.origin + window.location.pathname;
       const { error } = await db.auth.signInWithOAuth({
         provider: 'google',
         options: { redirectTo: redirectUri }
       });
-      if (error) showToast('Gagal login via Google: ' + error.message, 'error');
+      if (error) {
+        showLoading(false);
+        showToast('Gagal login via Google: ' + error.message, 'error');
+      }
     }
 
-    // AUTHENTICATION SECURITY DENGAN PENANGANAN ERROR RLS SUPABASE
+    // STRICT AUTHENTICATION GUARD
     async function processAuthUser(authUser) {
       if (!authUser || !authUser.email) {
-        doLogoutClean();
+        await handleAccessDenied("Format data autentikasi tidak valid.");
         return;
       }
 
       const email = authUser.email.toLowerCase().trim();
+      showLoading(true, "Memverifikasi Izin Akses...");
 
       try {
         const { data: userRecord, error } = await db
@@ -561,24 +584,36 @@
           .ilike('email', email)
           .maybeSingle();
 
-        // JIKA EMAIL TIDAK ADA ATAU DITOLAK OLEH RLS / ERROR SUPABASE
-        if (error || !userRecord) {
-          await db.auth.signOut();
-          doLogoutClean();
-          showToast(`Akses Ditolak: Email ${email} belum terdaftar di sistem. Hubungi Admin!`, 'error');
+        if (error) {
+          console.error("Error DB users:", error);
+          await handleAccessDenied(`Terjadi kendala server saat memverifikasi email ${email}.`);
           return;
         }
 
-        // AKUN VERIFIKASI BERHASIL
+        if (!userRecord) {
+          await handleAccessDenied(`Akses Ditolak: Email ${email} belum terdaftar di sistem. Hubungi Admin!`);
+          return;
+        }
+
+        // AKUN TERDAFTAR DAN SAH
         currentUser = userRecord;
         localStorage.setItem('gh_user_session', JSON.stringify(currentUser));
+        
+        await fetchAppData();
         showDashboard();
+        showLoading(false);
 
       } catch (err) {
-        await db.auth.signOut();
-        doLogoutClean();
-        showToast('Terjadi kesalahan validasi akun.', 'error');
+        console.error("System auth error:", err);
+        await handleAccessDenied("Terjadi kesalahan tak terduga pada validasi keamanan.");
       }
+    }
+
+    async function handleAccessDenied(message) {
+      await db.auth.signOut();
+      doLogoutClean();
+      showLoading(false);
+      showToast(message, 'error');
     }
 
     function showDashboard() {
@@ -594,7 +629,6 @@
       }
 
       switchTab('catat');
-      fetchAppData();
     }
 
     function doLogoutClean() {
@@ -605,8 +639,11 @@
     }
 
     function doLogout() {
+      showLoading(true, "Proses Keluar...");
       doLogoutClean();
-      db.auth.signOut();
+      db.auth.signOut().then(() => {
+        showLoading(false);
+      });
     }
 
     function switchTab(tabName) {
