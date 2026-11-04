@@ -9,19 +9,19 @@
   <link rel="stylesheet" href="assets/css/style.css">
   <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
 </head>
-<body class="bg-slate-100 flex min-h-screen font-sans">
+<body class="bg-[#F4F6FA] flex min-h-screen font-sans text-slate-800">
 
   <!-- SIDEBAR CONTAINER -->
   <div id="sidebarContainer"></div>
 
   <!-- MAIN CONTENT -->
-  <main class="flex-1 p-8 space-y-6 overflow-y-auto">
-    <div class="border-b pb-4 border-slate-200">
-      <h2 class="text-2xl font-extrabold text-slate-900">Log Aktivitas Sistem</h2>
-      <p class="text-xs text-slate-500">Riwayat jejak aktivitas pengguna di dalam aplikasi.</p>
+  <main class="flex-1 p-8 space-y-8 overflow-y-auto">
+    <div class="border-b border-slate-200/80 pb-4">
+      <h2 class="text-2xl font-black text-slate-900 tracking-tight">Log Aktivitas Sistem</h2>
+      <p class="text-xs text-slate-400 mt-0.5">Jejak audit seluruh aksi pengguna di aplikasi</p>
     </div>
 
-    <div class="bg-white p-6 rounded-3xl shadow-sm border border-slate-200">
+    <div class="bg-white p-7 rounded-[28px] border border-slate-200/70 ui-card-shadow">
       <div id="logsContainer" class="divide-y divide-slate-100"></div>
     </div>
   </main>
@@ -43,19 +43,19 @@
       const container = document.getElementById('logsContainer');
 
       if (!logs || logs.length === 0) {
-        container.innerHTML = `<p class="py-4 text-xs text-slate-400 italic">Belum ada aktivitas tercatat.</p>`;
+        container.innerHTML = `<p class="py-6 text-center text-xs text-slate-400 font-medium">Belum ada aktivitas tercatat.</p>`;
         return;
       }
 
       container.innerHTML = logs.map(l => `
-        <div class="py-3 flex items-center justify-between text-xs">
-          <div class="space-y-0.5">
-            <span class="font-bold text-slate-800">${l.user_email}</span>
-            <p class="text-slate-500">${l.details}</p>
+        <div class="py-4 flex items-center justify-between text-xs">
+          <div class="space-y-1">
+            <span class="font-bold text-slate-900 text-sm">${l.user_email}</span>
+            <p class="text-slate-500 font-medium">${l.details}</p>
           </div>
           <div class="text-right">
-            <span class="px-2 py-0.5 bg-slate-100 text-slate-600 rounded font-extrabold text-[10px]">${l.action}</span>
-            <p class="text-[10px] text-slate-400 mt-0.5">${new Date(l.created_at).toLocaleString('id-ID')}</p>
+            <span class="px-3 py-1 bg-blue-50 text-blue-600 rounded-full font-extrabold text-[10px]">${l.action}</span>
+            <p class="text-[10px] text-slate-400 font-medium mt-1">${new Date(l.created_at).toLocaleString('id-ID')}</p>
           </div>
         </div>
       `).join('');
