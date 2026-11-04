@@ -1292,7 +1292,7 @@
       const activeExpenses = appData.expenses.filter(e => appData.activeTrip && e.trip_id === appData.activeTrip.id);
       const totalNominal = activeExpenses.reduce((sum, item) => sum + (parseFloat(item.nominal) || 0), 0);
       let text = `*REKAP EXPENSE TRIP: ${appData.activeTrip ? appData.activeTrip.judul : '-'}*\n`;
-      text me += `Total Pengeluaran: Rp ${totalNominal.toLocaleString('id-ID')}\n\n`;
+      text += `Total Pengeluaran: Rp ${totalNominal.toLocaleString('id-ID')}\n\n`;
       text += `*Rincian Sub-Expense:*\n`;
       activeExpenses.forEach((e, idx) => {
         text += `${idx + 1}. [${e.kategori || 'Umum'}] ${e.nama_item} - Rp ${parseFloat(e.nominal).toLocaleString('id-ID')} (Dibayar: ${getUserNameByEmail(e.pembayar_email)})\n`;
