@@ -15,7 +15,7 @@ window.addEventListener('DOMContentLoaded', async () => {
 
   if (!userRecord) {
     await db.auth.signOut();
-    alert(`Akses Ditolak: Email ${email} belum terdaftar!`);
+    alert(`Akses Ditolak: Email ${email} belum terdaftar di sistem!`);
     window.location.href = 'login.html';
     return;
   }
@@ -47,7 +47,7 @@ function hideLoader() {
 }
 
 async function refreshAppData() {
-  const { data: users } = await db.from('users').select('*');
+  const { data: users } = await db.from('users').select('*').order('created_at', { ascending: true });
   const { data: trips } = await db.from('trips').select('*').order('created_at', { ascending: true });
   const { data: categories } = await db.from('categories').select('*').order('nama', { ascending: true });
   const { data: expenses } = await db.from('expenses').select('*').order('created_at', { ascending: false });
@@ -73,7 +73,6 @@ function navigateTo(viewName) {
 
   currentView = viewName;
 
-  // Active Menu Highlight
   document.querySelectorAll('.nav-btn').forEach(btn => {
     btn.classList.remove('bg-white', 'text-blue-600', 'shadow-lg');
     btn.classList.add('text-blue-100');
@@ -98,18 +97,16 @@ function navigateTo(viewName) {
 }
 
 // -------------------------------------------------------------
-// 1. DASHBOARD VIEW (LENGKAP DENGAN DATA SARAN TAMBAHAN)
+// 1. DASHBOARD VIEW
 // -------------------------------------------------------------
 function renderDashboardView() {
   const selectedTrip = appData.trips.find(t => t.id === appData.selectedTripId) || appData.trips[0];
   const tripExpenses = appData.expenses.filter(e => selectedTrip && e.trip_id === selectedTrip.id);
   
-  // Total Stat Event
   const totalEventNominal = tripExpenses.reduce((sum, e) => sum + parseFloat(e.nominal || 0), 0);
   const activeParticipantsCount = (selectedTrip && selectedTrip.active_participant_emails) ? selectedTrip.active_participant_emails.length : appData.users.length;
   const avgPerPerson = activeParticipantsCount > 0 ? (totalEventNominal / activeParticipantsCount) : 0;
 
-  // Personal Utang/Piutang
   let totalPiutang = 0;
   let totalUtang = 0;
   let breakdownMap = {};
@@ -139,7 +136,6 @@ function renderDashboardView() {
     });
   });
 
-  // Kategori Stat Breakdown
   let categoryMap = {};
   tripExpenses.forEach(e => {
     const cat = e.kategori || 'Umum';
@@ -147,7 +143,6 @@ function renderDashboardView() {
   });
 
   const html = `
-    <!-- HEADER & QUICK TRIP SELECTOR -->
     <div class="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
       <div>
         <h2 class="text-2xl font-black tracking-tight text-slate-900 brand-font">Dashboard Overview</h2>
@@ -162,7 +157,6 @@ function renderDashboardView() {
       </div>
     </div>
 
-    <!-- METRIC CARDS GRID -->
     <div class="grid grid-cols-1 md:grid-cols-4 gap-5">
       <div class="bg-blue-600 text-white p-6 rounded-[24px] ui-card-shadow space-y-2">
         <span class="text-[10px] font-extrabold uppercase tracking-wider text-blue-200">Total Piutang Saya</span>
@@ -189,10 +183,7 @@ function renderDashboardView() {
       </div>
     </div>
 
-    <!-- LOWER SECTION: CATEGORY STATS & RINCIAN TAGIHAN -->
     <div class="grid grid-cols-1 lg:grid-cols-3 gap-6">
-      
-      <!-- RINCIAN UTANG/PIUTANG PER ANGGOTA -->
       <div class="lg:col-span-2 bg-white p-6 rounded-[24px] border border-slate-200/70 ui-card-shadow space-y-4">
         <div class="flex items-center justify-between border-b border-slate-100 pb-3">
           <h3 class="font-extrabold text-slate-900 text-sm brand-font">Rincian Tagihan Per Anggota</h3>
@@ -223,7 +214,6 @@ function renderDashboardView() {
         </div>
       </div>
 
-      <!-- WIDGET PROPORSI KATEGORI EXPENSE -->
       <div class="bg-white p-6 rounded-[24px] border border-slate-200/70 ui-card-shadow space-y-4">
         <div class="border-b border-slate-100 pb-3">
           <h3 class="font-extrabold text-slate-900 text-sm brand-font">Pengeluaran Per Kategori</h3>
@@ -248,7 +238,6 @@ function renderDashboardView() {
               }).join('')}
         </div>
       </div>
-
     </div>
   `;
 
@@ -264,6 +253,10 @@ function onDashboardTripChange(tripId) {
 // 2. INPUT EXPENSE VIEW
 // -------------------------------------------------------------
 function renderExpenseView() {
+  // Hanya ambil user & kategori yang berstatus active (jika ada properti status)
+  const activeUsers = appData.users.filter(u => u.status !== 'INACTIVE');
+  const activeCategories = appData.categories.filter(c => c.status !== 'INACTIVE');
+
   const html = `
     <div class="border-b border-slate-200/80 pb-4">
       <h2 class="text-2xl font-black text-slate-900 brand-font">Input Expense Baru</h2>
@@ -282,7 +275,9 @@ function renderExpenseView() {
           <div class="space-y-1">
             <label class="text-xs font-bold text-slate-700 uppercase">Kategori Expense</label>
             <select id="expKategoriSelect" required class="w-full px-4 py-2.5 text-xs border border-slate-200 rounded-xl font-semibold text-slate-700 bg-slate-50 focus:outline-none">
-              ${appData.categories.map(c => `<option value="${c.nama}">${c.nama}</option>`).join('')}
+              ${activeCategories.length > 0 
+                ? activeCategories.map(c => `<option value="${c.nama}">${c.nama}</option>`).join('')
+                : `<option value="Umum">Umum</option>`}
             </select>
           </div>
         </div>
@@ -302,7 +297,7 @@ function renderExpenseView() {
           <div class="space-y-1">
             <label class="text-xs font-bold text-slate-700 uppercase">Pembayar Awal:</label>
             <select id="expPembayarSelect" required class="w-full px-4 py-2.5 text-xs border border-slate-200 rounded-xl font-bold text-blue-600 bg-slate-50 focus:outline-none">
-              ${appData.users.map(u => `<option value="${u.email}" ${u.email.toLowerCase() === currentUser.email.toLowerCase() ? 'selected' : ''}>${u.nama} (${u.email})</option>`).join('')}
+              ${activeUsers.map(u => `<option value="${u.email}" ${u.email.toLowerCase() === currentUser.email.toLowerCase() ? 'selected' : ''}>${u.nama} (${u.email})</option>`).join('')}
             </select>
           </div>
           <div class="space-y-1">
@@ -322,7 +317,6 @@ function renderExpenseView() {
       </form>
     </section>
 
-    <!-- LOG HISTORI EXPENSE -->
     <section class="bg-white p-7 rounded-[24px] border border-slate-200/70 ui-card-shadow space-y-4">
       <div class="flex items-center justify-between border-b border-slate-100 pb-3">
         <h3 class="font-extrabold text-slate-900 text-sm brand-font">Log Transaksi Pengeluaran</h3>
@@ -355,7 +349,9 @@ function renderExpenseView() {
 function onTripSelectChangeSPA(tripId) {
   const targetTrip = appData.trips.find(t => t.id === tripId);
   const activeEmails = targetTrip ? (targetTrip.active_participant_emails || []) : [];
-  const eligibleUsers = activeEmails.length > 0 ? appData.users.filter(u => activeEmails.includes(u.email)) : appData.users;
+  const activeUsers = appData.users.filter(u => u.status !== 'INACTIVE');
+  
+  const eligibleUsers = activeEmails.length > 0 ? activeUsers.filter(u => activeEmails.includes(u.email)) : activeUsers;
 
   document.getElementById('expPesertaChecklistContainer').innerHTML = eligibleUsers.map(u => `
     <label class="flex items-center p-2.5 bg-slate-50 border border-slate-200/70 rounded-xl cursor-pointer">
@@ -400,7 +396,7 @@ async function handleExpenseSubmitSPA(e) {
   }]);
 
   await refreshAppData();
-  renderExpenseView(); // Re-render tanpa reload halaman
+  renderExpenseView();
 }
 
 // -------------------------------------------------------------
@@ -533,25 +529,43 @@ async function renderLogsView() {
 }
 
 // -------------------------------------------------------------
-// 5. MASTER SETUP VIEW (ADMIN ONLY)
+// 5. MASTER SETUP VIEW (LENGKAP: TRIP, USER, CATEGORY - ADD, EDIT, DELETE, TOGGLE INACTIVE)
 // -------------------------------------------------------------
 function renderSetupView() {
   document.getElementById('mainContentView').innerHTML = `
     <div class="border-b border-slate-200/80 pb-4">
-      <h2 class="text-2xl font-black text-amber-600 brand-font">Master Setup (Admin Only)</h2>
-      <p class="text-xs text-slate-400 mt-0.5">Kelola trip dan user terdaftar</p>
+      <h2 class="text-2xl font-black text-amber-600 brand-font">Master Setup (Khusus Admin)</h2>
+      <p class="text-xs text-slate-400 mt-0.5">Kelola trip, user terdaftar, dan kategori pengeluaran</p>
     </div>
 
-    <section class="bg-white p-7 rounded-[24px] border border-slate-200/70 ui-card-shadow space-y-3">
-      <h3 class="text-xs font-bold uppercase text-slate-700">1. Buat Judul Trip Baru</h3>
+    <!-- 1. TRIP MANAGEMENT -->
+    <section class="bg-white p-7 rounded-[24px] border border-slate-200/70 ui-card-shadow space-y-4">
+      <h3 class="text-xs font-bold uppercase text-slate-700">1. Buat & Kelola Judul Trip</h3>
       <div class="flex gap-3">
         <input type="text" id="newTripTitle" placeholder="Misal: Outing Bali 2026" class="flex-1 px-4 py-2.5 text-xs border border-slate-200 rounded-xl bg-slate-50 focus:outline-none">
         <button onclick="handleCreateTripSPA()" class="px-5 py-2.5 bg-amber-500 hover:bg-amber-600 text-white font-bold text-xs rounded-xl shadow-md">Buat Trip</button>
       </div>
+      <div class="pt-2">
+        <p class="text-[11px] font-bold text-slate-400 uppercase tracking-wider mb-2">Daftar Trip Terdaftar:</p>
+        <div class="space-y-2">
+          ${appData.trips.length === 0 
+            ? `<p class="text-xs text-slate-400 italic">Belum ada trip.</p>`
+            : appData.trips.map(t => `
+                <div class="p-3 bg-slate-50 border border-slate-200/80 rounded-2xl text-xs flex justify-between items-center">
+                  <span class="font-bold text-slate-800">${t.judul}</span>
+                  <div class="flex items-center gap-2">
+                    <button onclick="handleEditTripSPA('${t.id}', '${t.judul.replace(/'/g, "\\'")}')" class="px-2.5 py-1 bg-white border border-slate-300 hover:bg-slate-100 text-slate-700 rounded-lg text-[10px] font-bold">Edit</button>
+                    <button onclick="handleDeleteTripSPA('${t.id}')" class="px-2.5 py-1 bg-rose-50 text-rose-600 hover:bg-rose-100 rounded-lg text-[10px] font-bold">Hapus</button>
+                  </div>
+                </div>
+              `).join('')}
+        </div>
+      </div>
     </section>
 
-    <section class="bg-white p-7 rounded-[24px] border border-slate-200/70 ui-card-shadow space-y-3">
-      <h3 class="text-xs font-bold uppercase text-slate-700">2. Tambah Data User Sistem</h3>
+    <!-- 2. USER MANAGEMENT -->
+    <section class="bg-white p-7 rounded-[24px] border border-slate-200/70 ui-card-shadow space-y-4">
+      <h3 class="text-xs font-bold uppercase text-slate-700">2. Tambah & Kelola User Sistem</h3>
       <div class="grid grid-cols-1 sm:grid-cols-3 gap-3">
         <input type="text" id="newUserName" placeholder="Nama Lengkap" class="px-4 py-2.5 text-xs border border-slate-200 rounded-xl bg-slate-50 focus:outline-none">
         <input type="email" id="newUserEmail" placeholder="email@favehotels.com" class="px-4 py-2.5 text-xs border border-slate-200 rounded-xl bg-slate-50 focus:outline-none">
@@ -563,17 +577,89 @@ function renderSetupView() {
           <button onclick="handleAddUserSPA()" class="flex-1 px-4 py-2.5 bg-blue-600 hover:bg-blue-700 text-white font-bold text-xs rounded-xl shadow-md">+ Tambah</button>
         </div>
       </div>
+      <div class="pt-2">
+        <p class="text-[11px] font-bold text-slate-400 uppercase tracking-wider mb-2">Daftar User Terdaftar Database:</p>
+        <div class="grid grid-cols-1 sm:grid-cols-2 gap-3">
+          ${appData.users.length === 0 
+            ? `<p class="text-xs text-slate-400 italic">Belum ada user di database.</p>`
+            : appData.users.map(u => {
+                const isInactive = u.status === 'INACTIVE';
+                return `
+                  <div class="p-3 bg-slate-50 border border-slate-200/80 rounded-2xl text-xs flex justify-between items-center ${isInactive ? 'opacity-60' : ''}">
+                    <div>
+                      <p class="font-bold text-slate-900">${u.nama} <span class="text-[9px] px-2 py-0.5 bg-blue-100 text-blue-700 rounded-full font-bold ml-1">${u.role}</span> ${isInactive ? '<span class="text-[9px] px-2 py-0.5 bg-rose-100 text-rose-700 rounded-full font-bold">INACTIVE</span>' : ''}</p>
+                      <p class="text-[10px] text-slate-400 mt-0.5">${u.email}</p>
+                    </div>
+                    <div class="flex items-center gap-1.5">
+                      <button onclick="handleEditUserSPA('${u.id}', '${u.nama.replace(/'/g, "\\'")}', '${u.role}')" class="px-2 py-1 bg-white border border-slate-300 hover:bg-slate-100 text-slate-700 rounded-lg text-[10px] font-bold">Edit</button>
+                      <button onclick="handleToggleUserStatusSPA('${u.id}', '${u.status || 'ACTIVE'}')" class="px-2 py-1 ${isInactive ? 'bg-emerald-50 text-emerald-600' : 'bg-amber-50 text-amber-700'} rounded-lg text-[10px] font-bold">${isInactive ? 'Aktifkan' : 'Nonaktif'}</button>
+                      <button onclick="handleDeleteUserSPA('${u.id}')" class="px-2 py-1 bg-rose-50 text-rose-600 hover:bg-rose-100 rounded-lg text-[10px] font-bold">Hapus</button>
+                    </div>
+                  </div>
+                `;
+              }).join('')}
+        </div>
+      </div>
+    </section>
+
+    <!-- 3. KATEGORI EXPENSE MANAGEMENT -->
+    <section class="bg-white p-7 rounded-[24px] border border-slate-200/70 ui-card-shadow space-y-4">
+      <h3 class="text-xs font-bold uppercase text-slate-700">3. Kelola Kategori Expense</h3>
+      <div class="flex gap-3">
+        <input type="text" id="newCategoryName" placeholder="Misal: Konsumsi, Bensin, Tiket" class="flex-1 px-4 py-2.5 text-xs border border-slate-200 rounded-xl bg-slate-50 focus:outline-none">
+        <button onclick="handleAddCategorySPA()" class="px-5 py-2.5 bg-emerald-600 hover:bg-emerald-700 text-white font-bold text-xs rounded-xl shadow-md">+ Tambah Kategori</button>
+      </div>
+      <div class="pt-2">
+        <p class="text-[11px] font-bold text-slate-400 uppercase tracking-wider mb-2">Daftar Kategori Terdaftar:</p>
+        <div class="flex flex-wrap gap-2">
+          ${appData.categories.length === 0
+            ? `<p class="text-xs text-slate-400 italic">Belum ada kategori kustom.</p>`
+            : appData.categories.map(c => `
+                <div class="px-3 py-1.5 bg-slate-50 border border-slate-200 rounded-xl text-xs font-bold text-slate-700 flex items-center gap-2">
+                  <span>${c.nama}</span>
+                  <button onclick="handleDeleteCategorySPA('${c.id}')" class="text-rose-500 hover:text-rose-700 text-xs"><i class="ri-close-circle-fill"></i></button>
+                </div>
+              `).join('')}
+        </div>
+      </div>
     </section>
   `;
 }
 
+// HANDLERS UNTUK SETUP MASTER
 async function handleCreateTripSPA() {
   const judul = document.getElementById('newTripTitle').value.trim();
   if (!judul) return alert('Masukkan judul trip!');
 
-  await db.from('trips').insert([{ judul, created_by: currentUser.email }]);
-  await refreshAppData();
+  const { error } = await db.from('trips').insert([{ judul, created_by: currentUser.email }]);
+  if (error) return alert('Gagal membuat trip: ' + error.message);
+
+  await db.from('activity_logs').insert([{ user_email: currentUser.email, action: 'CREATE_TRIP', details: `Membuat trip: ${judul}` }]);
   alert('Trip baru berhasil dibuat!');
+  await refreshAppData();
+  renderSetupView();
+}
+
+async function handleEditTripSPA(id, oldJudul) {
+  const newJudul = prompt('Edit Judul Trip:', oldJudul);
+  if (!newJudul || newJudul.trim() === '' || newJudul === oldJudul) return;
+
+  const { error } = await db.from('trips').update({ judul: newJudul.trim() }).eq('id', id);
+  if (error) return alert('Gagal edit trip: ' + error.message);
+
+  await db.from('activity_logs').insert([{ user_email: currentUser.email, action: 'EDIT_TRIP', details: `Mengubah judul trip "${oldJudul}" menjadi "${newJudul}"` }]);
+  await refreshAppData();
+  renderSetupView();
+}
+
+async function handleDeleteTripSPA(id) {
+  if (!confirm('Apakah Anda yakin ingin menghapus trip ini?')) return;
+
+  const { error } = await db.from('trips').delete().eq('id', id);
+  if (error) return alert('Gagal menghapus trip: ' + error.message);
+
+  await db.from('activity_logs').insert([{ user_email: currentUser.email, action: 'DELETE_TRIP', details: `Menghapus trip ID: ${id}` }]);
+  await refreshAppData();
   renderSetupView();
 }
 
@@ -584,9 +670,72 @@ async function handleAddUserSPA() {
 
   if (!nama || !email) return alert('Lengkapi data user!');
 
-  await db.from('users').insert([{ nama, email, role }]);
-  await refreshAppData();
+  const { error } = await db.from('users').insert([{ nama, email, role, status: 'ACTIVE' }]);
+  if (error) return alert('Gagal membuat user: ' + error.message);
+
+  await db.from('activity_logs').insert([{ user_email: currentUser.email, action: 'ADD_USER', details: `Menambahkan user: ${email} (${role})` }]);
   alert('User baru berhasil ditambahkan!');
+  await refreshAppData();
+  renderSetupView();
+}
+
+async function handleEditUserSPA(id, oldNama, oldRole) {
+  const newNama = prompt('Edit Nama User:', oldNama);
+  if (!newNama || newNama.trim() === '') return;
+
+  const newRole = prompt('Edit Role (USER/ADMIN):', oldRole);
+  if (!newRole || !['USER', 'ADMIN'].includes(newRole.toUpperCase())) return;
+
+  const { error } = await db.from('users').update({ nama: newNama.trim(), role: newRole.toUpperCase() }).eq('id', id);
+  if (error) return alert('Gagal edit user: ' + error.message);
+
+  await db.from('activity_logs').insert([{ user_email: currentUser.email, action: 'EDIT_USER', details: `Mengubah data user ID: ${id}` }]);
+  await refreshAppData();
+  renderSetupView();
+}
+
+async function handleToggleUserStatusSPA(id, currentStatus) {
+  const targetStatus = currentStatus === 'INACTIVE' ? 'ACTIVE' : 'INACTIVE';
+  const { error } = await db.from('users').update({ status: targetStatus }).eq('id', id);
+  if (error) return alert('Gagal mengubah status user: ' + error.message);
+
+  await db.from('activity_logs').insert([{ user_email: currentUser.email, action: 'TOGGLE_USER_STATUS', details: `Mengubah status user ID: ${id} menjadi ${targetStatus}` }]);
+  await refreshAppData();
+  renderSetupView();
+}
+
+async function handleDeleteUserSPA(id) {
+  if (!confirm('Apakah Anda yakin ingin menghapus user ini dari database?')) return;
+
+  const { error } = await db.from('users').delete().eq('id', id);
+  if (error) return alert('Gagal menghapus user: ' + error.message);
+
+  await db.from('activity_logs').insert([{ user_email: currentUser.email, action: 'DELETE_USER', details: `Menghapus user ID: ${id}` }]);
+  await refreshAppData();
+  renderSetupView();
+}
+
+async function handleAddCategorySPA() {
+  const nama = document.getElementById('newCategoryName').value.trim();
+  if (!nama) return alert('Masukkan nama kategori!');
+
+  const { error } = await db.from('categories').insert([{ nama }]);
+  if (error) return alert('Gagal menambah kategori: ' + error.message);
+
+  await db.from('activity_logs').insert([{ user_email: currentUser.email, action: 'ADD_CATEGORY', details: `Menambahkan kategori: ${nama}` }]);
+  alert('Kategori baru ditambahkan!');
+  await refreshAppData();
+  renderSetupView();
+}
+
+async function handleDeleteCategorySPA(id) {
+  if (!confirm('Hapus kategori ini?')) return;
+
+  const { error } = await db.from('categories').delete().eq('id', id);
+  if (error) return alert('Gagal menghapus kategori: ' + error.message);
+
+  await db.from('activity_logs').insert([{ user_email: currentUser.email, action: 'DELETE_CATEGORY', details: `Menghapus kategori ID: ${id}` }]);
+  await refreshAppData();
   renderSetupView();
 }
 
