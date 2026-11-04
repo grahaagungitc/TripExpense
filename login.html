@@ -6,52 +6,80 @@
   <title>Login - Expense Tracker</title>
   <script src="https://cdn.tailwindcss.com"></script>
   <link href="https://cdn.jsdelivr.net/npm/remixicon@3.5.0/fonts/remixicon.css" rel="stylesheet">
+  <link rel="stylesheet" href="assets/css/style.css">
+  <!-- Supabase JS SDK -->
   <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
 </head>
-<body class="bg-slate-100 flex items-center justify-center min-h-screen p-4 font-sans">
+<body class="bg-[#F4F6FA] flex items-center justify-center min-h-screen p-4 font-sans text-slate-800">
 
-  <div class="w-full max-w-md bg-white p-8 rounded-3xl shadow-xl border border-slate-200 text-center space-y-6">
-    <div class="w-14 h-14 bg-indigo-600 rounded-2xl flex items-center justify-center text-white text-3xl mx-auto shadow-lg shadow-indigo-200">
+  <div class="w-full max-w-md bg-white p-8 rounded-[28px] ui-card-shadow border border-slate-200/70 text-center space-y-6">
+    <div class="w-14 h-14 bg-blue-600 rounded-2xl flex items-center justify-center text-white text-3xl mx-auto shadow-lg shadow-blue-500/30">
       <i class="ri-wallet-3-line"></i>
     </div>
     
     <div class="space-y-1">
-      <h2 class="text-2xl font-extrabold text-slate-900">Sign in</h2>
-      <p class="text-xs text-slate-500">Akses terbatas hanya untuk email terdaftar oleh Admin.</p>
+      <h2 class="text-2xl font-black text-slate-900 brand-font">Sign in</h2>
+      <p class="text-xs text-slate-400 font-semibold">Akses terbatas hanya untuk email yang sudah terdaftar oleh Admin.</p>
     </div>
 
-    <button onclick="loginGoogle()" class="w-full py-3.5 px-4 border border-slate-300 hover:border-indigo-500 hover:bg-slate-50 text-slate-700 font-bold rounded-2xl transition shadow-sm flex items-center justify-center gap-3">
+    <!-- TOMBOL SIGN IN WITH GOOGLE -->
+    <button id="btnGoogleLogin" onclick="loginGoogle()" class="w-full py-3.5 px-4 border border-slate-200 hover:border-blue-500 hover:bg-slate-50 text-slate-700 font-extrabold rounded-2xl transition-all shadow-sm flex items-center justify-center gap-3">
       <svg class="w-5 h-5" viewBox="0 0 24 24">
         <path fill="#4285F4" d="M22.56 12.25c0-.78-.07-1.53-.2-2.25H12v4.26h5.92c-.26 1.37-1.04 2.53-2.21 3.31v2.77h3.57c2.08-1.92 3.28-4.74 3.28-8.09z"/>
         <path fill="#34A853" d="M12 23c2.97 0 5.46-.98 7.28-2.66l-3.57-2.77c-.98.66-2.23 1.06-3.71 1.06-2.86 0-5.29-1.93-6.16-4.53H2.18v2.84C3.99 20.53 7.7 23 12 23z"/>
         <path fill="#FBBC05" d="M5.84 14.09c-.22-.66-.35-1.36-.35-2.09s.13-1.43.35-2.09V7.06H2.18C1.43 8.55 1 10.22 1 12s.43 3.45 1.18 4.94l2.85-2.22.81-.63z"/>
         <path fill="#EA4335" d="M12 5.38c1.62 0 3.06.56 4.21 1.64l3.15-3.15C17.45 2.09 14.97 1 12 1 7.7 1 3.99 3.47 2.18 7.06l3.66 2.84c.87-2.6 3.3-4.52 6.16-4.52z"/>
       </svg>
-      <span>Sign in with Google</span>
+      <span id="btnGoogleText">Sign in with Google</span>
     </button>
   </div>
 
   <script src="assets/js/supabase-client.js"></script>
-  <script src="assets/js/auth-guard.js"></script>
   <script>
     async function loginGoogle() {
-  const redirectUri = window.location.origin + window.location.pathname.replace('login.html', 'app.html');
+      const btnText = document.getElementById('btnGoogleText');
+      btnText.innerText = 'Mengarahkan ke Google...';
 
-  await db.auth.signInWithOAuth({
-    provider: 'google',
-    options: { redirectTo: redirectUri }
-    });
-  }
+      // Pastikan URL pengalihan dinamis menunjuk ke app.html
+      let currentPath = window.location.pathname;
+      if (currentPath.endsWith('login.html')) {
+        currentPath = currentPath.replace('login.html', 'app.html');
+      } else if (!currentPath.endsWith('/')) {
+        currentPath += '/app.html';
+      } else {
+        currentPath += 'app.html';
+      }
+
+      const redirectUri = window.location.origin + currentPath;
+
+      try {
+        const { error } = await db.auth.signInWithOAuth({
+          provider: 'google',
+          options: { 
+            redirectTo: redirectUri 
+          }
         });
-  
-      if (error) alert('Gagal login: ' + error.message);
+
+        if (error) {
+          alert('Gagal melakukan login: ' + error.message);
+          btnText.innerText = 'Sign in with Google';
+        }
+      } catch (err) {
+        alert('Terjadi kesalahan koneksi Supabase.');
+        btnText.innerText = 'Sign in with Google';
+      }
     }
 
-    // Jika sudah punya session valid, langsung lempar ke index
-    db.auth.getSession().then(async ({ data: { session } }) => {
-      if (session) {
-        const u = await checkAuthAndProtect();
-        if (u) window.location.href = 'index.html';
+    // Jika sudah ada sesi aktif, otomatis arahkan ke app.html
+    window.addEventListener('DOMContentLoaded', async () => {
+      const { data: { session } } = await db.auth.getSession();
+      if (session && session.user) {
+        let currentPath = window.location.pathname;
+        if (currentPath.endsWith('login.html')) {
+          window.location.href = currentPath.replace('login.html', 'app.html');
+        } else {
+          window.location.href = 'app.html';
+        }
       }
     });
   </script>
