@@ -1,0 +1,145 @@
+<!DOCTYPE html>
+<html lang="id">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Split & Settlement - Expense Tracker</title>
+  <script src="https://cdn.tailwindcss.com"></script>
+  <link href="https://cdn.jsdelivr.net/npm/remixicon@3.5.0/fonts/remixicon.css" rel="stylesheet">
+  <link rel="stylesheet" href="assets/css/style.css">
+  <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
+</head>
+<body class="bg-slate-100 flex min-h-screen font-sans">
+
+  <!-- SIDEBAR CONTAINER -->
+  <div id="sidebarContainer"></div>
+
+  <!-- MAIN CONTENT -->
+  <main class="flex-1 p-8 space-y-6 overflow-y-auto">
+    <div class="border-b pb-4 border-slate-200">
+      <h2 class="text-2xl font-extrabold text-slate-900">Split & Settlement</h2>
+      <p class="text-xs text-slate-500">Kelola pelunasan antar peserta dan konfirmasi bukti pembayaran.</p>
+    </div>
+
+    <div id="settlementListContainer" class="space-y-6"></div>
+  </main>
+
+  <script src="assets/js/supabase-client.js"></script>
+  <script src="assets/js/auth-guard.js"></script>
+  <script src="assets/js/sidebar.js"></script>
+  <script>
+    let pageData = { users: [], trips: [], expenses: [], payments: [] };
+
+    document.addEventListener('DOMContentLoaded', async () => {
+      const user = await checkAuthAndProtect();
+      if (!user) return;
+
+      renderSidebar('settlement');
+      await loadSettlementData();
+    });
+
+    async function loadSettlementData() {
+      const { data: users } = await db.from('users').select('*');
+      const { data: trips } = await db.from('trips').select('*');
+      const { data: expenses } = await db.from('expenses').select('*');
+      const { data: payments } = await db.from('settlement_payments').select('*');
+
+      pageData = { users: users || [], trips: trips || [], expenses: expenses || [], payments: payments || [] };
+      renderSettlementList();
+    }
+
+    function renderSettlementList() {
+      const container = document.getElementById('settlementListContainer');
+      if (!pageData.trips.length) {
+        container.innerHTML = `<p class="text-xs text-slate-400 italic">Belum ada trip aktif.</p>`;
+        return;
+      }
+
+      container.innerHTML = pageData.trips.map(trip => {
+        const tripExpenses = pageData.expenses.filter(e => e.trip_id === trip.id);
+        let summaryMap = {};
+
+        tripExpenses.forEach(exp => {
+          const perOrang = exp.nominal / (exp.peserta_emails.length || 1);
+          exp.peserta_emails.forEach(pEmail => {
+            if (pEmail.toLowerCase() !== exp.pembayar_email.toLowerCase()) {
+              const pairKey = `${pEmail.toLowerCase()}->${exp.pembayar_email.toLowerCase()}`;
+              if (!summaryMap[pairKey]) {
+                summaryMap[pairKey] = { dariEmail: pEmail, keEmail: exp.pembayar_email, totalNominal: 0, childExpenses: [] };
+              }
+              summaryMap[pairKey].totalNominal += perOrang;
+              summaryMap[pairKey].childExpenses.push({ exp, perOrang });
+            }
+          });
+        });
+
+        return `
+          <div class="bg-white p-6 rounded-3xl shadow-sm border border-slate-200 space-y-4">
+            <div class="flex items-center justify-between border-b pb-3 border-slate-100">
+              <h3 class="font-extrabold text-slate-900 text-base">${trip.judul}</h3>
+              <span class="text-xs font-semibold text-slate-500">${tripExpenses.length} Item Pengeluaran</span>
+            </div>
+
+            <div class="grid grid-cols-1 md:grid-cols-2 gap-3">
+              ${Object.values(summaryMap).map(s => {
+                const isPengutang = currentUser.email.toLowerCase() === s.dariEmail.toLowerCase();
+                const isPembayar = currentUser.email.toLowerCase() === s.keEmail.toLowerCase();
+                const isAdmin = currentUser.role === 'ADMIN';
+
+                return `
+                  <div class="p-4 bg-slate-50 border border-slate-200 rounded-2xl space-y-2 text-xs">
+                    <div class="flex items-center justify-between font-bold">
+                      <span>${s.dariEmail.split('@')[0]} ➔ ${s.keEmail.split('@')[0]}</span>
+                      <span class="text-indigo-600">Rp ${s.totalNominal.toLocaleString('id-ID')}</span>
+                    </div>
+                    <div class="flex items-center justify-between pt-2 border-t border-slate-200">
+                      ${(isPengutang || isAdmin) ? `
+                        <label class="cursor-pointer text-[10px] bg-white border border-indigo-300 text-indigo-600 px-2.5 py-1 rounded-lg font-bold">
+                          Upload Bukti
+                          <input type="file" accept="image/*,application/pdf" class="hidden" onchange="uploadBulkProof(event, '${trip.id}', '${s.dariEmail}', '${s.keEmail}')">
+                        </label>
+                      ` : ''}
+                      ${(isPembayar || isAdmin) ? `
+                        <button onclick="approveSettlement('${trip.id}', '${s.dariEmail}', '${s.keEmail}')" class="text-[10px] bg-emerald-600 text-white px-2.5 py-1 rounded-lg font-bold">
+                          Approve Lunas
+                        </button>
+                      ` : ''}
+                    </div>
+                  </div>
+                `;
+              }).join('')}
+            </div>
+          </div>
+        `;
+      }).join('');
+    }
+
+    async function uploadBulkProof(event, tripId, dariEmail, keEmail) {
+      const file = event.target.files[0];
+      if (!file) return;
+
+      const fileName = `bulk_${Date.now()}_${file.name}`;
+      const { data } = await db.storage.from('receipts').upload(fileName, file);
+      const { data: pubData } = db.storage.from('receipts').getPublicUrl(fileName);
+
+      await db.from('activity_logs').insert([{
+        user_email: currentUser.email, action: 'UPLOAD_PROOF', details: `Mengunggah bukti transfer ke ${keEmail}`
+      }]);
+
+      alert('Bukti pembayaran berhasil diunggah!');
+      await loadSettlementData();
+    }
+
+    async function approveSettlement(tripId, dariEmail, keEmail) {
+      if (!confirm(`Setujui pelunasan dari ${dariEmail}?`)) return;
+
+      await db.from('activity_logs').insert([{
+        user_email: currentUser.email, action: 'APPROVE_SETTLEMENT', details: `Menyetujui pelunasan dari ${dariEmail}`
+      }]);
+
+      alert('Pelunasan berhasil disetujui!');
+      await loadSettlementData();
+    }
+  </script>
+</body>
+</html>
