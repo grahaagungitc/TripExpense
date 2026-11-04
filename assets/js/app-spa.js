@@ -3,6 +3,88 @@ let currentView = 'dashboard';
 let appData = { users: [], trips: [], categories: [], expenses: [], payments: [], selectedTripId: null };
 
 // -------------------------------------------------------------
+// HELPER UTILS: EMAIL TO NAME & MODERN NOTIFICATIONS
+// -------------------------------------------------------------
+function getUserNameByEmail(email) {
+  if (!email) return 'Unknown';
+  const target = appData.users.find(u => u.email.toLowerCase().trim() === email.toLowerCase().trim());
+  return target ? target.nama : email.split('@')[0];
+}
+
+function showToast(message, type = 'info') {
+  const container = document.getElementById('toastContainer');
+  if (!container) return;
+
+  const toast = document.createElement('div');
+  const bgColors = {
+    success: 'bg-emerald-600 text-white',
+    error: 'bg-rose-600 text-white',
+    info: 'bg-slate-900 text-white',
+    warning: 'bg-amber-500 text-white'
+  };
+
+  toast.className = `pointer-events-auto px-4 py-3 rounded-2xl shadow-xl text-xs font-bold flex items-center gap-2 transform transition-all duration-300 translate-y-4 opacity-0 ${bgColors[type] || bgColors.info}`;
+  toast.innerHTML = `<span>${message}</span>`;
+  container.appendChild(toast);
+
+  setTimeout(() => {
+    toast.classList.remove('translate-y-4', 'opacity-0');
+  }, 10);
+
+  setTimeout(() => {
+    toast.classList.add('opacity-0', 'translate-y-2');
+    setTimeout(() => toast.remove(), 300);
+  }, 3500);
+}
+
+let modalResolver = null;
+function showCustomConfirm(title, message) {
+  return new Promise((resolve) => {
+    document.getElementById('modalTitle').innerText = title;
+    document.getElementById('modalMessage').innerText = message;
+    document.getElementById('modalInputContainer').classList.add('hidden');
+    document.getElementById('modalBtnCancel').classList.remove('hidden');
+    
+    const confirmBtn = document.getElementById('modalBtnConfirm');
+    confirmBtn.innerText = 'Ya, Lanjutkan';
+    confirmBtn.onclick = () => { closeCustomModal(true); };
+
+    modalResolver = resolve;
+    document.getElementById('customModal').classList.remove('hidden');
+  });
+}
+
+function showCustomPrompt(title, defaultVal = '') {
+  return new Promise((resolve) => {
+    document.getElementById('modalTitle').innerText = title;
+    document.getElementById('modalMessage').innerText = '';
+    
+    const inputContainer = document.getElementById('modalInputContainer');
+    const input = document.getElementById('modalInput');
+    inputContainer.classList.remove('hidden');
+    input.value = defaultVal;
+    
+    document.getElementById('modalBtnCancel').classList.remove('hidden');
+    
+    const confirmBtn = document.getElementById('modalBtnConfirm');
+    confirmBtn.innerText = 'Simpan';
+    confirmBtn.onclick = () => { closeCustomModal(input.value); };
+
+    modalResolver = resolve;
+    document.getElementById('customModal').classList.remove('hidden');
+    setTimeout(() => input.focus(), 100);
+  });
+}
+
+function closeCustomModal(result) {
+  document.getElementById('customModal').classList.add('hidden');
+  if (modalResolver) {
+    modalResolver(result);
+    modalResolver = null;
+  }
+}
+
+// -------------------------------------------------------------
 // 0. STRICT AUTHENTICATION GUARD & INITIALIZATION
 // -------------------------------------------------------------
 window.addEventListener('DOMContentLoaded', async () => {
@@ -28,7 +110,6 @@ window.addEventListener('DOMContentLoaded', async () => {
       .maybeSingle();
 
     if (dbError || !userRecord) {
-      console.warn(`[SECURITY GUARD] Akses ditolak untuk email: ${email}`);
       await forceLogoutAndRedirect(`Akses Ditolak: Email (${email}) belum terdaftar di sistem. Hubungi Admin!`);
       return;
     }
@@ -112,7 +193,7 @@ async function refreshAppData() {
 // -------------------------------------------------------------
 function navigateTo(viewName) {
   if (viewName === 'setup' && currentUser.role !== 'ADMIN') {
-    alert('Halaman ini khusus Admin!');
+    showToast('Halaman ini khusus Admin!', 'warning');
     return;
   }
 
@@ -142,7 +223,7 @@ function navigateTo(viewName) {
 }
 
 // -------------------------------------------------------------
-// 1. DASHBOARD VIEW
+// 1. DASHBOARD VIEW (DICOCOKKAN DENGAN NAMA & RE-KALKULASI UTANG/PIUTANG)
 // -------------------------------------------------------------
 function renderDashboardView() {
   const selectedTrip = appData.trips.find(t => t.id === appData.selectedTripId) || appData.trips[0];
@@ -156,22 +237,28 @@ function renderDashboardView() {
   let totalUtang = 0;
   let breakdownMap = {};
 
-  appData.expenses.forEach(exp => {
-    const perOrang = exp.nominal / (exp.peserta_emails.length || 1);
-    const pembayar = exp.pembayar_email.toLowerCase();
+  const myEmail = currentUser.email.toLowerCase().trim();
 
-    exp.peserta_emails.forEach(pEmail => {
-      const peserta = pEmail.toLowerCase();
+  // Kalkulasi Utang Piutang per Trip Aktif
+  tripExpenses.forEach(exp => {
+    const pesertaList = exp.peserta_emails || [];
+    if (!pesertaList.length) return;
+
+    const perOrang = parseFloat(exp.nominal) / pesertaList.length;
+    const pembayar = exp.pembayar_email.toLowerCase().trim();
+
+    pesertaList.forEach(pEmailRaw => {
+      const peserta = pEmailRaw.toLowerCase().trim();
       if (peserta !== pembayar) {
-        const pay = appData.payments.find(p => p.expense_id === exp.id && p.dari_email.toLowerCase() === peserta);
+        const pay = appData.payments.find(p => p.expense_id === exp.id && p.dari_email.toLowerCase().trim() === peserta);
         const isLunas = pay && pay.status === 'APPROVED';
 
         if (!isLunas) {
-          if (pembayar === currentUser.email.toLowerCase()) {
+          if (pembayar === myEmail) {
             totalPiutang += perOrang;
             if (!breakdownMap[peserta]) breakdownMap[peserta] = { piutang: 0, utang: 0 };
             breakdownMap[peserta].piutang += perOrang;
-          } else if (peserta === currentUser.email.toLowerCase()) {
+          } else if (peserta === myEmail) {
             totalUtang += perOrang;
             if (!breakdownMap[pembayar]) breakdownMap[pembayar] = { piutang: 0, utang: 0 };
             breakdownMap[pembayar].utang += perOrang;
@@ -205,19 +292,19 @@ function renderDashboardView() {
     <div class="grid grid-cols-1 md:grid-cols-4 gap-5">
       <div class="bg-blue-600 text-white p-6 rounded-[24px] ui-card-shadow space-y-2">
         <span class="text-[10px] font-extrabold uppercase tracking-wider text-blue-200">Total Piutang Saya</span>
-        <p class="text-3xl font-black">${'Rp ' + totalPiutang.toLocaleString('id-ID')}</p>
+        <p class="text-3xl font-black">${'Rp ' + Math.round(totalPiutang).toLocaleString('id-ID')}</p>
         <p class="text-[11px] text-blue-100 font-semibold">Hak tagihan Anda ke peserta lain</p>
       </div>
 
       <div class="bg-white p-6 rounded-[24px] border border-slate-200/70 ui-card-shadow space-y-2">
         <span class="text-[10px] font-extrabold uppercase tracking-wider text-slate-400">Total Utang Saya</span>
-        <p class="text-3xl font-black text-rose-600">${'Rp ' + totalUtang.toLocaleString('id-ID')}</p>
+        <p class="text-3xl font-black text-rose-600">${'Rp ' + Math.round(totalUtang).toLocaleString('id-ID')}</p>
         <p class="text-[11px] text-slate-400 font-semibold">Kewajiban bayar yang belum lunas</p>
       </div>
 
       <div class="bg-white p-6 rounded-[24px] border border-slate-200/70 ui-card-shadow space-y-2">
         <span class="text-[10px] font-extrabold uppercase tracking-wider text-slate-400">Total Pengeluaran Event</span>
-        <p class="text-3xl font-black text-slate-900">${'Rp ' + totalEventNominal.toLocaleString('id-ID')}</p>
+        <p class="text-3xl font-black text-slate-900">${'Rp ' + Math.round(totalEventNominal).toLocaleString('id-ID')}</p>
         <p class="text-[11px] text-slate-400 font-semibold">${tripExpenses.length} transaksi di event ini</p>
       </div>
 
@@ -239,12 +326,14 @@ function renderDashboardView() {
             ? `<p class="py-6 text-center text-xs text-slate-400 font-semibold">Tidak ada utang atau piutang aktif saat ini.</p>`
             : Object.keys(breakdownMap).map(email => {
                 const item = breakdownMap[email];
-                const selisih = item.piutang - item.utang;
+                const selisih = Math.round(item.piutang - item.utang);
+                const namaUser = getUserNameByEmail(email);
+
                 return `
                   <div class="py-3.5 flex items-center justify-between text-xs">
                     <div>
-                      <p class="font-extrabold text-slate-900">${email}</p>
-                      <p class="text-[11px] text-slate-400 font-semibold">Piutang: Rp ${item.piutang.toLocaleString('id-ID')} • Utang: Rp ${item.utang.toLocaleString('id-ID')}</p>
+                      <p class="font-extrabold text-slate-900">${namaUser} <span class="text-[10px] text-slate-400 font-semibold">(${email})</span></p>
+                      <p class="text-[11px] text-slate-400 font-semibold">Piutang: Rp ${Math.round(item.piutang).toLocaleString('id-ID')} • Utang: Rp ${Math.round(item.utang).toLocaleString('id-ID')}</p>
                     </div>
                     <div>
                       ${selisih > 0 
@@ -273,7 +362,7 @@ function renderDashboardView() {
                   <div class="space-y-1">
                     <div class="flex justify-between text-xs font-bold">
                       <span class="text-slate-700">${cat}</span>
-                      <span class="text-slate-900">Rp ${val.toLocaleString('id-ID')} (${pct}%)</span>
+                      <span class="text-slate-900">Rp ${Math.round(val).toLocaleString('id-ID')} (${pct}%)</span>
                     </div>
                     <div class="w-full h-2 bg-slate-100 rounded-full overflow-hidden">
                       <div class="h-full bg-blue-600 rounded-full" style="width: ${pct}%"></div>
@@ -375,7 +464,7 @@ function renderExpenseView() {
                 <div>
                   <span class="px-2 py-0.5 bg-blue-50 text-blue-600 rounded-full font-black text-[10px]">${e.kategori || 'Umum'}</span>
                   <p class="font-black text-slate-900 mt-1">${e.nama_item}</p>
-                  <p class="text-slate-400 text-[11px] font-semibold">Dibayar oleh: <strong>${e.pembayar_email}</strong> • ${e.peserta_emails.length} Peserta</p>
+                  <p class="text-slate-400 text-[11px] font-semibold">Dibayar oleh: <strong>${getUserNameByEmail(e.pembayar_email)}</strong> • ${e.peserta_emails.length} Peserta</p>
                 </div>
                 <div class="text-right">
                   <p class="font-black text-slate-900 text-sm">Rp ${parseFloat(e.nominal).toLocaleString('id-ID')}</p>
@@ -413,7 +502,7 @@ async function handleExpenseSubmitSPA(e) {
   e.preventDefault();
   const btn = id => document.getElementById(id);
   const selectedPeserta = Array.from(document.querySelectorAll('.exp-chk-peserta:checked')).map(c => c.value);
-  if (!selectedPeserta.length) return alert('Pilih minimal 1 peserta!');
+  if (!selectedPeserta.length) return showToast('Pilih minimal 1 peserta!', 'warning');
 
   const tripId = btn('expTripSelect').value;
   const kategori = btn('expKategoriSelect').value;
@@ -437,18 +526,19 @@ async function handleExpenseSubmitSPA(e) {
     trip_id: tripId, kategori, nama_item: item, nominal, pembayar_email: pembayarEmail, peserta_emails: selectedPeserta, bukti_url: buktiUrl
   }]);
 
-  if (error) return alert('Gagal menyimpan: ' + error.message);
+  if (error) return showToast('Gagal menyimpan: ' + error.message, 'error');
 
   await db.from('activity_logs').insert([{
     user_email: currentUser.email, action: 'CREATE_EXPENSE', details: `Menambahkan sub-expense "${item}" senilai Rp ${nominal.toLocaleString('id-ID')}`
   }]);
 
+  showToast('Transaksi berhasil disimpan!', 'success');
   await refreshAppData();
   renderExpenseView();
 }
 
 // -------------------------------------------------------------
-// 3. SETTLEMENT VIEW
+// 3. SETTLEMENT VIEW (MENAMPILKAN NAMA ANGGOTA BUKAN EMAIL)
 // -------------------------------------------------------------
 function renderSettlementView() {
   const containerHtml = appData.trips.map(trip => {
@@ -476,6 +566,8 @@ function renderSettlementView() {
         </div>
         <div class="grid grid-cols-1 md:grid-cols-2 gap-4">
           ${Object.values(summaryMap).map(s => {
+            const dariNama = getUserNameByEmail(s.dariEmail);
+            const keNama = getUserNameByEmail(s.keEmail);
             const isPengutang = currentUser.email.toLowerCase() === s.dariEmail.toLowerCase();
             const isPembayar = currentUser.email.toLowerCase() === s.keEmail.toLowerCase();
             const isAdmin = currentUser.role === 'ADMIN';
@@ -483,8 +575,8 @@ function renderSettlementView() {
             return `
               <div class="p-4 bg-slate-50 border border-slate-200/70 rounded-2xl space-y-3 text-xs">
                 <div class="flex items-center justify-between font-black text-slate-900">
-                  <span>${s.dariEmail.split('@')[0]} ➔ ${s.keEmail.split('@')[0]}</span>
-                  <span class="text-blue-600">Rp ${s.totalNominal.toLocaleString('id-ID')}</span>
+                  <span>${dariNama} ➔ ${keNama}</span>
+                  <span class="text-blue-600">Rp ${Math.round(s.totalNominal).toLocaleString('id-ID')}</span>
                 </div>
                 <div class="flex items-center justify-between pt-2 border-t border-slate-200/70">
                   ${(isPengutang || isAdmin) ? `
@@ -527,19 +619,20 @@ async function uploadBulkProofSPA(event, tripId, dariEmail, keEmail) {
     user_email: currentUser.email, action: 'UPLOAD_PROOF', details: `Upload bukti bayar ke ${keEmail}`
   }]);
 
-  alert('Bukti transfer berhasil diunggah!');
+  showToast('Bukti transfer berhasil diunggah!', 'success');
   await refreshAppData();
   renderSettlementView();
 }
 
 async function approveSettlementSPA(tripId, dariEmail, keEmail) {
-  if (!confirm(`Setujui pelunasan dari ${dariEmail}?`)) return;
+  const isConfirmed = await showCustomConfirm('Konfirmasi Pelunasan', `Setujui pelunasan dari ${getUserNameByEmail(dariEmail)}?`);
+  if (!isConfirmed) return;
 
   await db.from('activity_logs').insert([{
     user_email: currentUser.email, action: 'APPROVE_SETTLEMENT', details: `Menyetujui pelunasan dari ${dariEmail}`
   }]);
 
-  alert('Pelunasan berhasil disetujui!');
+  showToast('Pelunasan berhasil disetujui!', 'success');
   await refreshAppData();
   renderSettlementView();
 }
@@ -562,7 +655,7 @@ async function renderLogsView() {
           : logs.map(l => `
               <div class="py-3.5 flex items-center justify-between text-xs">
                 <div>
-                  <span class="font-extrabold text-slate-900">${l.user_email}</span>
+                  <span class="font-extrabold text-slate-900">${getUserNameByEmail(l.user_email)} (${l.user_email})</span>
                   <p class="text-slate-500 font-semibold mt-0.5">${l.details}</p>
                 </div>
                 <div class="text-right">
@@ -577,7 +670,7 @@ async function renderLogsView() {
 }
 
 // -------------------------------------------------------------
-// 5. MASTER SETUP VIEW (WITH DATA INTEGRITY GUARDS & STATUS TOGGLES)
+// 5. MASTER SETUP VIEW
 // -------------------------------------------------------------
 function renderSetupView() {
   document.getElementById('mainContentView').innerHTML = `
@@ -615,7 +708,7 @@ function renderSetupView() {
       </div>
     </section>
 
-    <!-- 2. USER MANAGEMENT (UI FIXED FOR ACCORDION / BUTTON FIT) -->
+    <!-- 2. USER MANAGEMENT -->
     <section class="bg-white p-7 rounded-[24px] border border-slate-200/70 ui-card-shadow space-y-4">
       <h3 class="text-xs font-bold uppercase text-slate-700">2. Tambah & Kelola User Sistem</h3>
       <div class="grid grid-cols-1 sm:grid-cols-3 gap-3">
@@ -671,10 +764,10 @@ function renderSetupView() {
                 return `
                   <div class="px-3.5 py-1.5 bg-slate-50 border border-slate-200 rounded-xl text-xs font-bold text-slate-700 flex items-center gap-2 ${isInactive ? 'opacity-50' : ''}">
                     <span>${c.nama} ${isInactive ? '(Nonaktif)' : ''}</span>
-                    <button onclick="handleToggleCategoryStatusSPA('${c.id}', '${c.status || 'ACTIVE'}')" class="text-[10px] px-1.5 py-0.5 rounded ${isInactive ? 'bg-emerald-100 text-emerald-700' : 'bg-amber-100 text-amber-800'}" title="Toggle Active Status">
+                    <button onclick="handleToggleCategoryStatusSPA('${c.id}', '${c.status || 'ACTIVE'}')" class="text-[10px] px-1.5 py-0.5 rounded ${isInactive ? 'bg-emerald-100 text-emerald-700' : 'bg-amber-100 text-amber-800'}">
                       ${isInactive ? 'Aktifkan' : 'Nonaktif'}
                     </button>
-                    <button onclick="handleDeleteCategorySPA('${c.id}', '${c.nama.replace(/'/g, "\\'")}')" class="text-rose-500 hover:text-rose-700 text-xs ml-1" title="Hapus Permanen">
+                    <button onclick="handleDeleteCategorySPA('${c.id}', '${c.nama.replace(/'/g, "\\'")}')" class="text-rose-500 hover:text-rose-700 text-xs ml-1">
                       <i class="ri-close-circle-fill"></i>
                     </button>
                   </div>
@@ -686,32 +779,29 @@ function renderSetupView() {
   `;
 }
 
-// -------------------------------------------------------------
-// LOGIKA SELEKTIF HAPUS VS NONAKTIFKAN (DATA INTEGRITY)
-// -------------------------------------------------------------
-
-// TRIP HANDLERS
+// SETUP HANDLERS WITH MODERN NOTIFICATIONS
 async function handleCreateTripSPA() {
   const judul = document.getElementById('newTripTitle').value.trim();
-  if (!judul) return alert('Masukkan judul trip!');
+  if (!judul) return showToast('Masukkan judul trip!', 'warning');
 
   const { error } = await db.from('trips').insert([{ judul, created_by: currentUser.email, status: 'ACTIVE' }]);
-  if (error) return alert('Gagal membuat trip: ' + error.message);
+  if (error) return showToast('Gagal membuat trip: ' + error.message, 'error');
 
   await db.from('activity_logs').insert([{ user_email: currentUser.email, action: 'CREATE_TRIP', details: `Membuat trip: ${judul}` }]);
-  alert('Trip baru berhasil dibuat!');
+  showToast('Trip baru berhasil dibuat!', 'success');
   await refreshAppData();
   renderSetupView();
 }
 
 async function handleEditTripSPA(id, oldJudul) {
-  const newJudul = prompt('Edit Judul Trip:', oldJudul);
+  const newJudul = await showCustomPrompt('Edit Judul Trip', oldJudul);
   if (!newJudul || newJudul.trim() === '' || newJudul === oldJudul) return;
 
   const { error } = await db.from('trips').update({ judul: newJudul.trim() }).eq('id', id);
-  if (error) return alert('Gagal edit trip: ' + error.message);
+  if (error) return showToast('Gagal edit trip: ' + error.message, 'error');
 
   await db.from('activity_logs').insert([{ user_email: currentUser.email, action: 'EDIT_TRIP', details: `Mengubah judul trip "${oldJudul}" menjadi "${newJudul}"` }]);
+  showToast('Judul trip diperbarui!', 'success');
   await refreshAppData();
   renderSetupView();
 }
@@ -719,60 +809,59 @@ async function handleEditTripSPA(id, oldJudul) {
 async function handleToggleTripStatusSPA(id, currentStatus) {
   const targetStatus = currentStatus === 'INACTIVE' ? 'ACTIVE' : 'INACTIVE';
   const { error } = await db.from('trips').update({ status: targetStatus }).eq('id', id);
-  if (error) return alert('Gagal mengubah status trip: ' + error.message);
+  if (error) return showToast('Gagal mengubah status trip: ' + error.message, 'error');
 
   await db.from('activity_logs').insert([{ user_email: currentUser.email, action: 'TOGGLE_TRIP_STATUS', details: `Mengubah status trip ID: ${id} menjadi ${targetStatus}` }]);
+  showToast(`Status trip diubah ke ${targetStatus}`, 'info');
   await refreshAppData();
   renderSetupView();
 }
 
 async function handleDeleteTripSPA(id, judulTrip) {
-  // Cek apakah Trip sudah dipakai di tabel expenses
   const isUsed = appData.expenses.some(e => e.trip_id === id);
 
   if (isUsed) {
-    alert(`Gagal Menghapus: Trip "${judulTrip}" sudah memiliki riwayat transaksi!\n\nUntuk menjaga keutuhan laporan keuangan, Trip ini tidak bisa dihapus. Silakan gunakan tombol 'Nonaktif' agar tidak muncul lagi pada form input.`);
+    showToast(`Trip "${judulTrip}" sudah dipakai transaksi! Gunakan tombol 'Nonaktif'.`, 'warning');
     return;
   }
 
-  if (!confirm(`Apakah Anda yakin ingin menghapus permanen Trip "${judulTrip}"?`)) return;
+  const confirmDelete = await showCustomConfirm('Hapus Trip', `Apakah Anda yakin ingin menghapus permanen Trip "${judulTrip}"?`);
+  if (!confirmDelete) return;
 
   const { error } = await db.from('trips').delete().eq('id', id);
-  if (error) return alert('Gagal menghapus trip: ' + error.message);
+  if (error) return showToast('Gagal menghapus trip: ' + error.message, 'error');
 
   await db.from('activity_logs').insert([{ user_email: currentUser.email, action: 'DELETE_TRIP', details: `Menghapus trip: ${judulTrip}` }]);
+  showToast('Trip berhasil dihapus!', 'success');
   await refreshAppData();
   renderSetupView();
 }
 
-// USER HANDLERS
 async function handleAddUserSPA() {
   const nama = document.getElementById('newUserName').value.trim();
   const email = document.getElementById('newUserEmail').value.trim().toLowerCase();
   const role = document.getElementById('newUserRole').value;
 
-  if (!nama || !email) return alert('Lengkapi data user!');
+  if (!nama || !email) return showToast('Lengkapi data user!', 'warning');
 
   const { error } = await db.from('users').insert([{ nama, email, role, status: 'ACTIVE' }]);
-  if (error) return alert('Gagal membuat user: ' + error.message);
+  if (error) return showToast('Gagal membuat user: ' + error.message, 'error');
 
   await db.from('activity_logs').insert([{ user_email: currentUser.email, action: 'ADD_USER', details: `Menambahkan user: ${email} (${role})` }]);
-  alert('User baru berhasil ditambahkan!');
+  showToast('User baru berhasil ditambahkan!', 'success');
   await refreshAppData();
   renderSetupView();
 }
 
 async function handleEditUserSPA(id, oldNama, oldRole) {
-  const newNama = prompt('Edit Nama User:', oldNama);
+  const newNama = await showCustomPrompt('Edit Nama User', oldNama);
   if (!newNama || newNama.trim() === '') return;
 
-  const newRole = prompt('Edit Role (USER/ADMIN):', oldRole);
-  if (!newRole || !['USER', 'ADMIN'].includes(newRole.toUpperCase())) return;
-
-  const { error } = await db.from('users').update({ nama: newNama.trim(), role: newRole.toUpperCase() }).eq('id', id);
-  if (error) return alert('Gagal edit user: ' + error.message);
+  const { error } = await db.from('users').update({ nama: newNama.trim() }).eq('id', id);
+  if (error) return showToast('Gagal edit user: ' + error.message, 'error');
 
   await db.from('activity_logs').insert([{ user_email: currentUser.email, action: 'EDIT_USER', details: `Mengubah data user ID: ${id}` }]);
+  showToast('Data user diperbarui!', 'success');
   await refreshAppData();
   renderSetupView();
 }
@@ -780,43 +869,44 @@ async function handleEditUserSPA(id, oldNama, oldRole) {
 async function handleToggleUserStatusSPA(id, currentStatus) {
   const targetStatus = currentStatus === 'INACTIVE' ? 'ACTIVE' : 'INACTIVE';
   const { error } = await db.from('users').update({ status: targetStatus }).eq('id', id);
-  if (error) return alert('Gagal mengubah status user: ' + error.message);
+  if (error) return showToast('Gagal mengubah status user: ' + error.message, 'error');
 
   await db.from('activity_logs').insert([{ user_email: currentUser.email, action: 'TOGGLE_USER_STATUS', details: `Mengubah status user ID: ${id} menjadi ${targetStatus}` }]);
+  showToast(`Status user diubah ke ${targetStatus}`, 'info');
   await refreshAppData();
   renderSetupView();
 }
 
 async function handleDeleteUserSPA(id, emailUser) {
-  // Cek apakah email user sudah dipakai sebagai pembayar atau peserta di expenses
   const isUsedAsPembayar = appData.expenses.some(e => e.pembayar_email.toLowerCase() === emailUser.toLowerCase());
   const isUsedAsPeserta = appData.expenses.some(e => (e.peserta_emails || []).some(p => p.toLowerCase() === emailUser.toLowerCase()));
 
   if (isUsedAsPembayar || isUsedAsPeserta) {
-    alert(`Gagal Menghapus: User (${emailUser}) sudah memiliki riwayat transaksi/split expense!\n\nUser ini tidak boleh dihapus agar riwayat pembagian tagihan tetap akurat. Silakan gunakan tombol 'Nonaktif' untuk memblokir akses login & menyembunyikannya dari pilihan peserta.`);
+    showToast(`User (${emailUser}) terikat riwayat transaksi! Gunakan tombol 'Nonaktif'.`, 'warning');
     return;
   }
 
-  if (!confirm(`Apakah Anda yakin ingin menghapus permanen user ${emailUser} dari database?`)) return;
+  const confirmDelete = await showCustomConfirm('Hapus User', `Hapus permanen user ${emailUser} dari database?`);
+  if (!confirmDelete) return;
 
   const { error } = await db.from('users').delete().eq('id', id);
-  if (error) return alert('Gagal menghapus user: ' + error.message);
+  if (error) return showToast('Gagal menghapus user: ' + error.message, 'error');
 
   await db.from('activity_logs').insert([{ user_email: currentUser.email, action: 'DELETE_USER', details: `Menghapus user: ${emailUser}` }]);
+  showToast('User berhasil dihapus!', 'success');
   await refreshAppData();
   renderSetupView();
 }
 
-// CATEGORY HANDLERS
 async function handleAddCategorySPA() {
   const nama = document.getElementById('newCategoryName').value.trim();
-  if (!nama) return alert('Masukkan nama kategori!');
+  if (!nama) return showToast('Masukkan nama kategori!', 'warning');
 
   const { error } = await db.from('categories').insert([{ nama, status: 'ACTIVE' }]);
-  if (error) return alert('Gagal menambah kategori: ' + error.message);
+  if (error) return showToast('Gagal menambah kategori: ' + error.message, 'error');
 
   await db.from('activity_logs').insert([{ user_email: currentUser.email, action: 'ADD_CATEGORY', details: `Menambahkan kategori: ${nama}` }]);
-  alert('Kategori baru ditambahkan!');
+  showToast('Kategori baru ditambahkan!', 'success');
   await refreshAppData();
   renderSetupView();
 }
@@ -824,27 +914,29 @@ async function handleAddCategorySPA() {
 async function handleToggleCategoryStatusSPA(id, currentStatus) {
   const targetStatus = currentStatus === 'INACTIVE' ? 'ACTIVE' : 'INACTIVE';
   const { error } = await db.from('categories').update({ status: targetStatus }).eq('id', id);
-  if (error) return alert('Gagal mengubah status kategori: ' + error.message);
+  if (error) return showToast('Gagal mengubah status kategori: ' + error.message, 'error');
 
+  showToast(`Status kategori diubah ke ${targetStatus}`, 'info');
   await refreshAppData();
   renderSetupView();
 }
 
 async function handleDeleteCategorySPA(id, namaKategori) {
-  // Cek apakah Kategori sudah pernah dipakai di expenses
   const isUsed = appData.expenses.some(e => (e.kategori || '').toLowerCase() === namaKategori.toLowerCase());
 
   if (isUsed) {
-    alert(`Gagal Menghapus: Kategori "${namaKategori}" sudah terikat pada transaksi pengeluaran!\n\nGunakan tombol 'Nonaktif' agar kategori ini tidak muncul lagi di pilihan form input.`);
+    showToast(`Kategori "${namaKategori}" terikat transaksi! Gunakan 'Nonaktif'.`, 'warning');
     return;
   }
 
-  if (!confirm(`Hapus permanen kategori "${namaKategori}"?`)) return;
+  const confirmDelete = await showCustomConfirm('Hapus Kategori', `Hapus permanen kategori "${namaKategori}"?`);
+  if (!confirmDelete) return;
 
   const { error } = await db.from('categories').delete().eq('id', id);
-  if (error) return alert('Gagal menghapus kategori: ' + error.message);
+  if (error) return showToast('Gagal menghapus kategori: ' + error.message, 'error');
 
   await db.from('activity_logs').insert([{ user_email: currentUser.email, action: 'DELETE_CATEGORY', details: `Menghapus kategori: ${namaKategori}` }]);
+  showToast('Kategori dihapus!', 'success');
   await refreshAppData();
   renderSetupView();
 }
