@@ -9,73 +9,75 @@
   <link rel="stylesheet" href="assets/css/style.css">
   <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
 </head>
-<body class="bg-slate-100 flex min-h-screen font-sans">
+<body class="bg-[#F4F6FA] flex min-h-screen font-sans text-slate-800">
 
   <!-- SIDEBAR CONTAINER -->
   <div id="sidebarContainer"></div>
 
   <!-- MAIN CONTENT -->
-  <main class="flex-1 p-8 space-y-6 overflow-y-auto">
-    <div class="border-b pb-4 border-slate-200">
-      <h2 class="text-2xl font-extrabold text-slate-900">Catat Expense Baru</h2>
-      <p class="text-xs text-slate-500">Tambahkan pengeluaran baru dan pilih anggota yang berpartisipasi.</p>
+  <main class="flex-1 p-8 space-y-8 overflow-y-auto">
+    <div class="flex items-center justify-between border-b border-slate-200/80 pb-4">
+      <div>
+        <h2 class="text-2xl font-black text-slate-900 tracking-tight">Input Expense Baru</h2>
+        <p class="text-xs text-slate-400 mt-0.5">Mencatat item pengeluaran beserta pembayar & daftar anggotanya</p>
+      </div>
     </div>
 
-    <!-- FORM INPUT EXPENSE -->
-    <section class="bg-white p-6 rounded-3xl shadow-sm border border-slate-200 space-y-4">
-      <form id="expenseForm" onsubmit="handleExpenseSubmit(event)" class="space-y-4">
-        <div class="grid grid-cols-1 md:grid-cols-2 gap-4">
-          <div class="space-y-1">
-            <label class="text-xs font-semibold text-slate-700">Judul Trip / Event</label>
-            <select id="expTripSelect" onchange="onSelectTripChange()" required class="w-full px-3 py-2.5 text-xs border border-slate-300 rounded-xl font-bold text-indigo-700 focus:outline-none">
+    <!-- FORM INPUT -->
+    <section class="bg-white p-7 rounded-[28px] border border-slate-200/70 ui-card-shadow space-y-6">
+      <form id="expenseForm" onsubmit="handleExpenseSubmit(event)" class="space-y-5">
+        <div class="grid grid-cols-1 md:grid-cols-2 gap-5">
+          <div class="space-y-1.5">
+            <label class="text-xs font-bold text-slate-700 uppercase tracking-wider">Judul Trip / Event</label>
+            <select id="expTripSelect" onchange="onSelectTripChange()" required class="w-full px-4 py-3 text-xs border border-slate-200 rounded-2xl font-bold text-blue-600 focus:ring-2 focus:ring-blue-500 bg-slate-50/50 outline-none">
             </select>
           </div>
-          <div class="space-y-1">
-            <label class="text-xs font-semibold text-slate-700">Kategori Expense</label>
-            <select id="expKategoriSelect" required class="w-full px-3 py-2.5 text-xs border border-slate-300 rounded-xl font-semibold text-slate-700 focus:outline-none">
+          <div class="space-y-1.5">
+            <label class="text-xs font-bold text-slate-700 uppercase tracking-wider">Kategori Expense</label>
+            <select id="expKategoriSelect" required class="w-full px-4 py-3 text-xs border border-slate-200 rounded-2xl font-semibold text-slate-700 focus:ring-2 focus:ring-blue-500 bg-slate-50/50 outline-none">
             </select>
           </div>
         </div>
 
-        <div class="grid grid-cols-1 md:grid-cols-3 gap-4">
-          <div class="md:col-span-2 space-y-1">
-            <label class="text-xs font-semibold text-slate-700">Nama Sub-Pengeluaran / Item</label>
-            <input type="text" id="expNamaItem" required placeholder="Misal: Bensin, Dinner, Tiket Masuk" class="w-full px-3 py-2.5 text-xs border border-slate-300 rounded-xl focus:outline-none">
+        <div class="grid grid-cols-1 md:grid-cols-3 gap-5">
+          <div class="md:col-span-2 space-y-1.5">
+            <label class="text-xs font-bold text-slate-700 uppercase tracking-wider">Nama Item / Pengeluaran</label>
+            <input type="text" id="expNamaItem" required placeholder="Misal: Bensin, Dinner, Tiket Masuk" class="w-full px-4 py-3 text-xs border border-slate-200 rounded-2xl focus:ring-2 focus:ring-blue-500 bg-slate-50/50 outline-none font-medium">
           </div>
-          <div class="space-y-1">
-            <label class="text-xs font-semibold text-slate-700">Total Nominal (Rp)</label>
-            <input type="number" id="expNominal" required placeholder="500000" class="w-full px-3 py-2.5 text-xs border border-slate-300 rounded-xl font-bold focus:outline-none">
+          <div class="space-y-1.5">
+            <label class="text-xs font-bold text-slate-700 uppercase tracking-wider">Total Nominal (Rp)</label>
+            <input type="number" id="expNominal" required placeholder="500000" class="w-full px-4 py-3 text-xs border border-slate-200 rounded-2xl font-extrabold text-slate-900 focus:ring-2 focus:ring-blue-500 bg-slate-50/50 outline-none">
           </div>
         </div>
 
-        <div class="grid grid-cols-1 md:grid-cols-2 gap-4">
-          <div class="space-y-1">
-            <label class="text-xs font-semibold text-slate-700">Yang Membayar Di Awal:</label>
-            <select id="expPembayarSelect" required class="w-full px-3 py-2.5 text-xs border border-slate-300 rounded-xl font-bold text-indigo-700 focus:outline-none">
+        <div class="grid grid-cols-1 md:grid-cols-2 gap-5">
+          <div class="space-y-1.5">
+            <label class="text-xs font-bold text-slate-700 uppercase tracking-wider">Pembayar Awal:</label>
+            <select id="expPembayarSelect" required class="w-full px-4 py-3 text-xs border border-slate-200 rounded-2xl font-bold text-blue-600 focus:ring-2 focus:ring-blue-500 bg-slate-50/50 outline-none">
             </select>
           </div>
-          <div class="space-y-1">
-            <label class="text-xs font-semibold text-slate-700">Lampirkan Foto Struk / Nota</label>
-            <input type="file" id="expBuktiFile" accept="image/*,application/pdf" class="w-full text-xs text-slate-500 border border-slate-300 rounded-xl p-1.5">
+          <div class="space-y-1.5">
+            <label class="text-xs font-bold text-slate-700 uppercase tracking-wider">Foto Struk / Nota</label>
+            <input type="file" id="expBuktiFile" accept="image/*,application/pdf" class="w-full text-xs text-slate-500 border border-slate-200 rounded-2xl p-2 bg-slate-50/50">
           </div>
         </div>
 
-        <div class="space-y-2 pt-2 border-t border-slate-100">
-          <label class="text-xs font-semibold text-slate-700">Anggota Yang Ikut Menanggung Tagihan Ini:</label>
-          <div id="expPesertaChecklist" class="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 gap-2"></div>
+        <div class="space-y-2.5 pt-3 border-t border-slate-100">
+          <label class="text-xs font-bold text-slate-700 uppercase tracking-wider">Anggota Yang Ikut Menanggung:</label>
+          <div id="expPesertaChecklist" class="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 gap-2.5"></div>
         </div>
 
-        <button type="submit" class="w-full py-3 bg-indigo-600 hover:bg-indigo-700 text-white font-bold text-xs rounded-xl shadow-md transition flex items-center justify-center gap-2">
+        <button type="submit" class="w-full py-3.5 bg-blue-600 hover:bg-blue-700 text-white font-bold text-xs rounded-2xl shadow-lg shadow-blue-500/25 transition-all flex items-center justify-center gap-2">
           <i class="ri-save-line text-sm"></i> Simpan Sub-Expense
         </button>
       </form>
     </section>
 
-    <!-- LOG HISTORI EXPENSE -->
-    <section class="bg-white p-6 rounded-3xl shadow-sm border border-slate-200 space-y-4">
-      <div class="flex items-center justify-between border-b pb-3 border-slate-100">
-        <h3 class="font-extrabold text-slate-800 text-sm">Log Transaksi Sub-Expense</h3>
-        <p class="text-xs font-extrabold text-indigo-600" id="totalSubExpenseCount">0 Transaksi</p>
+    <!-- LOG HISTORI -->
+    <section class="bg-white p-7 rounded-[28px] border border-slate-200/70 ui-card-shadow space-y-4">
+      <div class="flex items-center justify-between border-b border-slate-100 pb-4">
+        <h3 class="font-extrabold text-slate-900 text-base">Log Transaksi Sub-Expense</h3>
+        <span class="px-3 py-1 bg-blue-50 text-blue-600 rounded-full font-extrabold text-xs" id="totalSubExpenseCount">0 Transaksi</span>
       </div>
       <div id="expenseLogContainer" class="divide-y divide-slate-100"></div>
     </section>
@@ -103,7 +105,6 @@
 
       pageData = { users: users || [], trips: trips || [], categories: categories || [], expenses: expenses || [] };
 
-      // Render Dropdowns
       document.getElementById('expTripSelect').innerHTML = pageData.trips.map(t => `<option value="${t.id}">${t.judul}</option>`).join('');
       document.getElementById('expKategoriSelect').innerHTML = pageData.categories.map(c => `<option value="${c.nama}">${c.nama}</option>`).join('');
       document.getElementById('expPembayarSelect').innerHTML = pageData.users.map(u => `
@@ -124,9 +125,9 @@
         : pageData.users;
 
       document.getElementById('expPesertaChecklist').innerHTML = eligibleUsers.map(u => `
-        <label class="flex items-center p-2.5 bg-slate-50 border border-slate-200 rounded-xl cursor-pointer">
-          <input type="checkbox" value="${u.email}" checked class="exp-chk-peserta w-4 h-4 text-indigo-600 rounded">
-          <span class="ml-2 text-xs font-medium text-slate-700 truncate">${u.nama}</span>
+        <label class="flex items-center p-3 bg-slate-50 border border-slate-200/80 rounded-2xl cursor-pointer hover:bg-blue-50/50 transition">
+          <input type="checkbox" value="${u.email}" checked class="exp-chk-peserta w-4 h-4 text-blue-600 rounded">
+          <span class="ml-2.5 text-xs font-semibold text-slate-700 truncate">${u.nama}</span>
         </label>
       `).join('');
     }
@@ -160,7 +161,6 @@
 
       if (error) return alert('Gagal menyimpan: ' + error.message);
 
-      // Record Activity Log
       await db.from('activity_logs').insert([{
         user_email: currentUser.email,
         action: 'CREATE_EXPENSE',
@@ -177,20 +177,20 @@
       const container = document.getElementById('expenseLogContainer');
 
       if (!pageData.expenses.length) {
-        container.innerHTML = `<p class="py-4 text-xs text-slate-400 italic">Belum ada riwayat transaksi.</p>`;
+        container.innerHTML = `<p class="py-6 text-center text-xs text-slate-400 font-medium">Belum ada riwayat transaksi.</p>`;
         return;
       }
 
       container.innerHTML = pageData.expenses.map(e => `
-        <div class="py-3 flex items-center justify-between text-xs">
+        <div class="py-4 flex items-center justify-between text-xs">
           <div>
-            <span class="px-2 py-0.5 bg-indigo-50 text-indigo-600 rounded-md font-bold text-[10px]">${e.kategori || 'Umum'}</span>
-            <p class="font-bold text-slate-800 mt-1">${e.nama_item}</p>
-            <p class="text-slate-400 text-[11px]">Dibayar oleh: <strong>${e.pembayar_email}</strong> • ${e.peserta_emails.length} Peserta</p>
+            <span class="px-2.5 py-0.5 bg-blue-50 text-blue-600 rounded-full font-extrabold text-[10px]">${e.kategori || 'Umum'}</span>
+            <p class="font-bold text-slate-900 mt-1 text-sm">${e.nama_item}</p>
+            <p class="text-slate-400 text-[11px] font-medium mt-0.5">Dibayar oleh: <strong>${e.pembayar_email}</strong> • ${e.peserta_emails.length} Peserta</p>
           </div>
           <div class="text-right">
             <p class="font-extrabold text-slate-900 text-sm">Rp ${parseFloat(e.nominal).toLocaleString('id-ID')}</p>
-            ${e.bukti_url ? `<a href="${e.bukti_url}" target="_blank" class="text-indigo-600 font-bold hover:underline text-[10px]">Lihat Struk</a>` : ''}
+            ${e.bukti_url ? `<a href="${e.bukti_url}" target="_blank" class="text-blue-600 font-bold hover:underline text-[10px] inline-block mt-0.5">Lihat Struk</a>` : ''}
           </div>
         </div>
       `).join('');
